@@ -14,11 +14,25 @@ define('SITE_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "ht
 define('RAPIDAPI_KEY', '');
 define('RAPIDAPI_HOST', 'instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com');
 
-// Optional Instagram Session Cookie (sessionid)
-// If provided, allows fetching 100% of Reels, Stories, and HD DP without rate limits
-define('INSTAGRAM_SESSION_ID', '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9jLNltGiJinF4pGJRiZIbM2DmDtzd2iQ');
-define('INSTAGRAM_CSRF_TOKEN', '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd');
-define('INSTAGRAM_DS_USER_ID', '22996724939');
+// Primary Instagram Session Cookie (sessionid)
+define('INSTAGRAM_SESSION_ID', '38251868688%3AuCw1iASW46sUYZ%3A20%3AAYk1c7um2NXec_c4uGP19E7EviPs3jvWbWkyByJOaQ');
+define('INSTAGRAM_CSRF_TOKEN', 'X5kJG1udcL5Z1qnr3VimY9cMG202eQBy');
+define('INSTAGRAM_DS_USER_ID', '38251868688');
+
+// Session Pool (indown.io multi-account rotation setup)
+// Automatically fails over across active accounts
+define('INSTAGRAM_SESSION_POOL', [
+    [
+        'session_id' => '38251868688%3AuCw1iASW46sUYZ%3A20%3AAYk1c7um2NXec_c4uGP19E7EviPs3jvWbWkyByJOaQ',
+        'csrf_token' => 'X5kJG1udcL5Z1qnr3VimY9cMG202eQBy',
+        'ds_user_id' => '38251868688'
+    ],
+    [
+        'session_id' => '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9jLNltGiJinF4pGJRiZIbM2DmDtzd2iQ',
+        'csrf_token' => '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd',
+        'ds_user_id' => '22996724939'
+    ]
+]);
 
 // Proxy configuration (Optional, useful if your hosting server IP gets restricted by Instagram)
 define('USE_PROXY', false);

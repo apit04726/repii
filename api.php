@@ -48,6 +48,29 @@ function shortcode_to_media_id($shortcode) {
     return $media_id;
 }
 
+// Get list of active sessions from pool with fallback
+function get_instagram_session_pool() {
+    $pool = [];
+    if (defined('INSTAGRAM_SESSION_POOL') && is_array(INSTAGRAM_SESSION_POOL) && !empty(INSTAGRAM_SESSION_POOL)) {
+        $pool = INSTAGRAM_SESSION_POOL;
+    } elseif (defined('INSTAGRAM_SESSION_ID') && !empty(INSTAGRAM_SESSION_ID)) {
+        $pool[] = [
+            'session_id' => INSTAGRAM_SESSION_ID,
+            'csrf_token' => defined('INSTAGRAM_CSRF_TOKEN') ? INSTAGRAM_CSRF_TOKEN : '',
+            'ds_user_id' => defined('INSTAGRAM_DS_USER_ID') ? INSTAGRAM_DS_USER_ID : ''
+        ];
+    }
+    return $pool;
+}
+
+function get_session_cookies($sess) {
+    if (empty($sess['session_id'])) return '';
+    $c = 'sessionid=' . $sess['session_id'];
+    if (!empty($sess['csrf_token'])) $c .= '; csrftoken=' . $sess['csrf_token'];
+    if (!empty($sess['ds_user_id'])) $c .= '; ds_user_id=' . $sess['ds_user_id'];
+    return $c;
+}
+
 // Universal cURL helper
 function make_curl_request($url, $headers = [], $post_data = null, $cookies = '') {
     $ch = curl_init();
@@ -91,7 +114,113 @@ function make_curl_request($url, $headers = [], $post_data = null, $cookies = ''
     return ['code' => $http_code, 'body' => $response];
 }
 
-// 1. Fetch via RapidAPI if key is available
+// 1. Fetch via RapidAPI Proxy (Universal Adapter for Lifetime Zero-Maintenance)
+function normalize_rapidapi_response($data, $original_url) {
+    if (!$data || !is_array($data)) return null;
+
+    $media_list = [];
+    $thumbnail = '';
+    $download_url = '';
+    $type = 'reel';
+    $author = 'Instagram Creator';
+    $caption = '✨ Instagram Media (Ready to Download)';
+
+    // Provider format 1: { "result": [ { "url": "...", "type": "video/mp4", ... } ] }
+    if (!empty($data['result']) && is_array($data['result'])) {
+        foreach ($data['result'] as $idx => $item) {
+            $u = $item['url'] ?? $item['download_url'] ?? '';
+            $t = (isset($item['type']) && strpos($item['type'], 'image') !== false) ? 'image' : 'video';
+            $thumb = $item['thumb'] ?? $item['thumbnail'] ?? '';
+            if ($u) {
+                if (empty($download_url)) $download_url = $u;
+                if (empty($thumbnail) && $thumb) $thumbnail = $thumb;
+                $media_list[] = [
+                    'type' => $t,
+                    'quality' => ($t === 'video') ? 'HD Video (MP4)' : 'HD Photo (JPG)',
+                    'url' => $u,
+                    'proxy_url' => 'download.php?type=' . $t . '&url=' . base64_encode($u)
+                ];
+            }
+        }
+    }
+    // Provider format 2: { "data": [ ... ] } or { "data": { "video_url": ... } }
+    elseif (!empty($data['data'])) {
+        $d = $data['data'];
+        if (isset($d['video_url']) || isset($d['image_url']) || isset($d['download_url'])) {
+            $v_url = $d['video_url'] ?? $d['download_url'] ?? '';
+            $i_url = $d['image_url'] ?? $d['thumbnail_url'] ?? '';
+            if ($v_url) {
+                $download_url = $v_url;
+                $media_list[] = [
+                    'type' => 'video',
+                    'quality' => 'HD Video (MP4)',
+                    'url' => $v_url,
+                    'proxy_url' => 'download.php?type=video&url=' . base64_encode($v_url)
+                ];
+            }
+            if ($i_url) {
+                if (empty($thumbnail)) $thumbnail = $i_url;
+                if (empty($download_url)) $download_url = $i_url;
+                $media_list[] = [
+                    'type' => 'image',
+                    'quality' => 'HD Photo (JPG)',
+                    'url' => $i_url,
+                    'proxy_url' => 'download.php?type=image&url=' . base64_encode($i_url)
+                ];
+            }
+        } elseif (is_array($d)) {
+            foreach ($d as $item) {
+                $u = $item['url'] ?? $item['video_url'] ?? $item['download_url'] ?? '';
+                if ($u) {
+                    $is_v = !empty($item['is_video']) || (isset($item['type']) && $item['type'] === 'video') || strpos($u, '.mp4') !== false;
+                    $media_list[] = [
+                        'type' => $is_v ? 'video' : 'image',
+                        'quality' => $is_v ? 'HD Video (MP4)' : 'HD Photo (JPG)',
+                        'url' => $u,
+                        'proxy_url' => 'download.php?type=' . ($is_v ? 'video' : 'image') . '&url=' . base64_encode($u)
+                    ];
+                }
+            }
+        }
+    }
+    // Provider format 3: Direct fields in root
+    elseif (!empty($data['url']) || !empty($data['video_url'])) {
+        $u = $data['video_url'] ?? $data['url'] ?? '';
+        $thumb = $data['thumb'] ?? $data['thumbnail'] ?? '';
+        $media_list[] = [
+            'type' => 'video',
+            'quality' => 'Full HD 1080p (MP4)',
+            'url' => $u,
+            'proxy_url' => 'download.php?type=video&url=' . base64_encode($u)
+        ];
+        if ($thumb) {
+            $thumbnail = $thumb;
+            $media_list[] = [
+                'type' => 'image',
+                'quality' => 'Cover Photo (JPG)',
+                'url' => $thumb,
+                'proxy_url' => 'download.php?type=image&url=' . base64_encode($thumb)
+            ];
+        }
+        $download_url = $u;
+    }
+
+    if (!empty($media_list)) {
+        if (empty($thumbnail)) $thumbnail = $media_list[0]['url'];
+        if (empty($download_url)) $download_url = $media_list[0]['url'];
+        return [
+            'type' => ($media_list[0]['type'] === 'video') ? 'reel' : 'post',
+            'author' => $data['owner']['username'] ?? $data['author'] ?? $author,
+            'caption' => $data['caption'] ?? $data['title'] ?? $caption,
+            'thumbnail' => $thumbnail,
+            'download_url' => $download_url,
+            'media' => $media_list
+        ];
+    }
+
+    return null;
+}
+
 function fetch_via_rapidapi($url) {
     if (empty(RAPIDAPI_KEY)) return null;
 
@@ -103,7 +232,8 @@ function fetch_via_rapidapi($url) {
     $res = make_curl_request($api_url, $headers);
     if ($res['code'] === 200 && !empty($res['body'])) {
         $data = json_decode($res['body'], true);
-        if ($data) return $data;
+        $normalized = normalize_rapidapi_response($data, $url);
+        if ($normalized) return $normalized;
     }
     return null;
 }
@@ -186,52 +316,54 @@ function fetch_instagram_dp($username) {
 
 // 3. Fetch Reels & Posts via Embed Scraper & Fallbacks
 function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
-    $cookies = '';
-    if (!empty(INSTAGRAM_SESSION_ID)) {
-        $cookies = 'sessionid=' . INSTAGRAM_SESSION_ID . '; csrftoken=' . INSTAGRAM_CSRF_TOKEN . (defined('INSTAGRAM_DS_USER_ID') ? '; ds_user_id=' . INSTAGRAM_DS_USER_ID : '');
-    }
-
-    // Try Mobile API if session or media id is available
+    $sessions = get_instagram_session_pool();
     $media_id = shortcode_to_media_id($shortcode);
-    if ($media_id) {
-        $mobile_api = "https://i.instagram.com/api/v1/media/{$media_id}/info/";
-        $headers = [
-            'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
-            'X-IG-App-ID: 936619743392459',
-            'Accept-Language: en-US,en;q=0.9',
-            'Accept: */*'
-        ];
-        $m_res = make_curl_request($mobile_api, $headers, null, $cookies);
-        if ($m_res['code'] === 200 && !empty($m_res['body'])) {
-            $m_data = json_decode($m_res['body'], true);
-            $item = $m_data['items'][0] ?? null;
-            if ($item) {
-                return parse_instagram_item($item, $shortcode);
+
+    // 1. Try each session in pool (indown.io multi-account failover)
+    foreach ($sessions as $sess) {
+        $cookies = get_session_cookies($sess);
+
+        // Engine A: Mobile App Media Info API
+        if ($media_id) {
+            $mobile_api = "https://i.instagram.com/api/v1/media/{$media_id}/info/";
+            $headers = [
+                'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
+                'X-IG-App-ID: 936619743392459',
+                'Accept-Language: en-US,en;q=0.9',
+                'Accept: */*'
+            ];
+            $m_res = make_curl_request($mobile_api, $headers, null, $cookies);
+            if ($m_res['code'] === 200 && !empty($m_res['body'])) {
+                $m_data = json_decode($m_res['body'], true);
+                $item = $m_data['items'][0] ?? null;
+                if ($item) {
+                    return parse_instagram_item($item, $shortcode);
+                }
             }
         }
-    }
 
-    // Try GraphQL Web API
-    if (!empty(INSTAGRAM_SESSION_ID)) {
-        $gql_url = "https://www.instagram.com/graphql/query";
-        $gql_headers = [
-            'X-IG-App-ID: 936619743392459',
-            'X-CSRFToken: ' . INSTAGRAM_CSRF_TOKEN,
-            'X-Requested-With: XMLHttpRequest',
-            'Origin: https://www.instagram.com',
-            'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
-            'Content-Type: application/x-www-form-urlencoded'
-        ];
-        $gql_data = [
-            'doc_id' => '24368985919464652',
-            'variables' => json_encode(['shortcode' => $shortcode])
-        ];
-        $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies);
-        if ($gql_res['code'] === 200 && !empty($gql_res['body'])) {
-            $gql_json = json_decode($gql_res['body'], true);
-            $media = $gql_json['data']['xdt_shortcode_media'] ?? null;
-            if ($media) {
-                return parse_graphql_media($media, $shortcode);
+        // Engine B: GraphQL Web API
+        if (!empty($sess['session_id'])) {
+            $gql_url = "https://www.instagram.com/graphql/query";
+            $gql_headers = [
+                'X-IG-App-ID: 936619743392459',
+                'X-CSRFToken: ' . ($sess['csrf_token'] ?? ''),
+                'X-Requested-With: XMLHttpRequest',
+                'Origin: https://www.instagram.com',
+                'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
+                'Content-Type: application/x-www-form-urlencoded'
+            ];
+            $gql_data = [
+                'doc_id' => '24368985919464652',
+                'variables' => json_encode(['shortcode' => $shortcode])
+            ];
+            $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies);
+            if ($gql_res['code'] === 200 && !empty($gql_res['body'])) {
+                $gql_json = json_decode($gql_res['body'], true);
+                $media = $gql_json['data']['xdt_shortcode_media'] ?? null;
+                if ($media) {
+                    return parse_graphql_media($media, $shortcode);
+                }
             }
         }
     }
@@ -452,11 +584,11 @@ function parse_graphql_media($media, $shortcode) {
 
 // 4. Stories Fetcher
 function fetch_instagram_story($username, $story_id = null) {
-    if (empty(INSTAGRAM_SESSION_ID)) {
-        return json_fail('Instagram Stories require an active Instagram session. Please configure INSTAGRAM_SESSION_ID in config.php to enable stories downloading.', 403);
+    $sessions = get_instagram_session_pool();
+    if (empty($sessions)) {
+        return json_fail('Instagram Stories require an active Instagram session in config.php.', 403);
     }
     
-    $cookies = 'sessionid=' . INSTAGRAM_SESSION_ID . '; csrftoken=' . INSTAGRAM_CSRF_TOKEN . (defined('INSTAGRAM_DS_USER_ID') ? '; ds_user_id=' . INSTAGRAM_DS_USER_ID : '');
     $mobile_headers = [
         'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
         'X-IG-App-ID: 936619743392459',
@@ -464,88 +596,106 @@ function fetch_instagram_story($username, $story_id = null) {
         'Accept: */*'
     ];
 
-    // Method 1: Specific Story Item ID (e.g. stories/username/1234567890)
-    if (!empty($story_id)) {
-        $api_url = "https://i.instagram.com/api/v1/media/{$story_id}/info/";
-        $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
-        if ($res['code'] === 200 && !empty($res['body'])) {
-            $data = json_decode($res['body'], true);
-            $item = $data['items'][0] ?? null;
-            if ($item) {
-                $is_video = !empty($item['video_versions']);
-                $video_url = $item['video_versions'][0]['url'] ?? '';
-                $thumb_url = $item['image_versions2']['candidates'][0]['url'] ?? '';
-                $author = $item['user']['username'] ?? $username;
-                $full_name = $item['user']['full_name'] ?? '';
+    foreach ($sessions as $sess) {
+        $cookies = get_session_cookies($sess);
 
-                $media_list = [];
-                if ($is_video && !empty($video_url)) {
-                    $media_list[] = [
-                        'type' => 'video',
-                        'quality' => 'Story Video HD (MP4)',
-                        'url' => $video_url,
-                        'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id) . '&url=' . base64_encode($video_url)
+        // Method 1: Specific Story Item ID (e.g. stories/username/1234567890)
+        if (!empty($story_id)) {
+            $api_url = "https://i.instagram.com/api/v1/media/{$story_id}/info/";
+            $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
+            if ($res['code'] === 200 && !empty($res['body'])) {
+                $data = json_decode($res['body'], true);
+                $item = $data['items'][0] ?? null;
+                if ($item) {
+                    $is_video = !empty($item['video_versions']);
+                    $video_url = $item['video_versions'][0]['url'] ?? '';
+                    $thumb_url = $item['image_versions2']['candidates'][0]['url'] ?? '';
+                    $author = $item['user']['username'] ?? $username;
+                    $full_name = $item['user']['full_name'] ?? '';
+
+                    $media_list = [];
+                    if ($is_video && !empty($video_url)) {
+                        $media_list[] = [
+                            'type' => 'video',
+                            'quality' => 'Story Video HD (MP4)',
+                            'url' => $video_url,
+                            'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id) . '&url=' . base64_encode($video_url)
+                        ];
+                    }
+                    if (!empty($thumb_url)) {
+                        $media_list[] = [
+                            'type' => 'image',
+                            'quality' => $is_video ? 'Story Poster (JPG)' : 'Story Photo HD (JPG)',
+                            'url' => $thumb_url,
+                            'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id . '_img') . '&url=' . base64_encode($thumb_url)
+                        ];
+                    }
+
+                    return [
+                        'type' => 'story',
+                        'author' => '@' . $author . ($full_name ? " ({$full_name})" : ''),
+                        'caption' => '✨ Instagram Story by @' . $author . ' (Ready to Download)',
+                        'thumbnail' => $thumb_url,
+                        'download_url' => $is_video ? $video_url : $thumb_url,
+                        'media' => $media_list
                     ];
                 }
-                if (!empty($thumb_url)) {
-                    $media_list[] = [
-                        'type' => 'image',
-                        'quality' => $is_video ? 'Story Poster (JPG)' : 'Story Photo HD (JPG)',
-                        'url' => $thumb_url,
-                        'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id . '_img') . '&url=' . base64_encode($thumb_url)
-                    ];
+            }
+        }
+
+        // Method 2: Handle highlights (stories/highlights/123456789)
+        if (strtolower($username) === 'highlights' && !empty($story_id)) {
+            $reel_key = "highlight:{$story_id}";
+            $api_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$reel_key}";
+            $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
+            if ($res['code'] === 200 && !empty($res['body'])) {
+                $data = json_decode($res['body'], true);
+                $items = $data['reels'][$reel_key]['items'] ?? [];
+                if (!empty($items)) {
+                    return parse_story_items($items, 'Highlight');
                 }
-
-                return [
-                    'type' => 'story',
-                    'author' => '@' . $author . ($full_name ? " ({$full_name})" : ''),
-                    'caption' => '✨ Instagram Story by @' . $author . ' (Ready to Download)',
-                    'thumbnail' => $thumb_url,
-                    'download_url' => $is_video ? $video_url : $thumb_url,
-                    'media' => $media_list
-                ];
             }
         }
-    }
 
-    // Method 2: Handle highlights (stories/highlights/123456789)
-    if (strtolower($username) === 'highlights' && !empty($story_id)) {
-        $reel_key = "highlight:{$story_id}";
-        $api_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$reel_key}";
-        $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
-        if ($res['code'] === 200 && !empty($res['body'])) {
-            $data = json_decode($res['body'], true);
-            $items = $data['reels'][$reel_key]['items'] ?? [];
-            if (!empty($items)) {
-                return parse_story_items($items, 'Highlight');
+        // Method 3: Fetch all active stories for user by resolving User ID
+        $user_id = null;
+        $search_url = "https://i.instagram.com/api/v1/users/search/?q=" . urlencode($username);
+        $s_res = make_curl_request($search_url, $mobile_headers, null, $cookies);
+        if ($s_res['code'] === 200 && !empty($s_res['body'])) {
+            $s_data = json_decode($s_res['body'], true);
+            foreach ($s_data['users'] ?? [] as $u) {
+                if (strtolower($u['username']) === strtolower($username)) {
+                    $user_id = $u['pk'] ?? $u['id'] ?? null;
+                    break;
+                }
             }
         }
-    }
 
-    // Method 3: Fetch all active stories for user by resolving User ID
-    $user_id = null;
-    $profile_url = "https://www.instagram.com/" . urlencode($username) . "/";
-    $p_res = make_curl_request($profile_url, [
-        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    ], null, $cookies);
+        if (!$user_id) {
+            $profile_url = "https://www.instagram.com/" . urlencode($username) . "/";
+            $p_res = make_curl_request($profile_url, [
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            ], null, $cookies);
 
-    if ($p_res['code'] === 200 && !empty($p_res['body'])) {
-        if (preg_match('/"props":{"id":"([0-9]+)"/i', $p_res['body'], $m) || 
-            preg_match('/"user_id":"([0-9]+)"/i', $p_res['body'], $m) ||
-            preg_match('/"id":"([0-9]{5,25})"/i', $p_res['body'], $m)) {
-            $user_id = $m[1];
+            if ($p_res['code'] === 200 && !empty($p_res['body'])) {
+                if (preg_match('/"props":{"id":"([0-9]+)"/i', $p_res['body'], $m) || 
+                    preg_match('/"user_id":"([0-9]+)"/i', $p_res['body'], $m) ||
+                    preg_match('/"id":"([0-9]{5,25})"/i', $p_res['body'], $m)) {
+                    $user_id = $m[1];
+                }
+            }
         }
-    }
 
-    if ($user_id) {
-        $reels_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$user_id}";
-        $r_res = make_curl_request($reels_url, $mobile_headers, null, $cookies);
-        if ($r_res['code'] === 200 && !empty($r_res['body'])) {
-            $r_data = json_decode($r_res['body'], true);
-            $items = $r_data['reels'][$user_id]['items'] ?? [];
-            if (!empty($items)) {
-                return parse_story_items($items, $username);
+        if ($user_id) {
+            $reels_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$user_id}";
+            $r_res = make_curl_request($reels_url, $mobile_headers, null, $cookies);
+            if ($r_res['code'] === 200 && !empty($r_res['body'])) {
+                $r_data = json_decode($r_res['body'], true);
+                $items = $r_data['reels'][$user_id]['items'] ?? [];
+                if (!empty($items)) {
+                    return parse_story_items($items, $username);
+                }
             }
         }
     }
