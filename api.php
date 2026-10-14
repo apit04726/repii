@@ -453,44 +453,143 @@ function parse_graphql_media($media, $shortcode) {
 // 4. Stories Fetcher
 function fetch_instagram_story($username, $story_id = null) {
     if (empty(INSTAGRAM_SESSION_ID)) {
-        return json_fail('Instagram Stories require an active Instagram session. Please configure INSTAGRAM_SESSION_ID in config.php to enable private stories downloading.', 403);
+        return json_fail('Instagram Stories require an active Instagram session. Please configure INSTAGRAM_SESSION_ID in config.php to enable stories downloading.', 403);
     }
-    // Fetch story endpoint with cookies
-    $cookies = 'sessionid=' . INSTAGRAM_SESSION_ID . '; csrftoken=' . INSTAGRAM_CSRF_TOKEN;
-    $api_url = "https://i.instagram.com/api/v1/feed/user/" . urlencode($username) . "/story/";
-    $headers = [
-        'User-Agent: Instagram 278.0.0.19.115 Android',
-        'X-IG-App-ID: 936619743392459'
+    
+    $cookies = 'sessionid=' . INSTAGRAM_SESSION_ID . '; csrftoken=' . INSTAGRAM_CSRF_TOKEN . (defined('INSTAGRAM_DS_USER_ID') ? '; ds_user_id=' . INSTAGRAM_DS_USER_ID : '');
+    $mobile_headers = [
+        'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
+        'X-IG-App-ID: 936619743392459',
+        'Accept-Language: en-US,en;q=0.9',
+        'Accept: */*'
     ];
-    $res = make_curl_request($api_url, $headers, null, $cookies);
-    if ($res['code'] === 200 && !empty($res['body'])) {
-        $data = json_decode($res['body'], true);
-        $reel = $data['reel']['items'] ?? [];
-        if (!empty($reel)) {
-            $media_list = [];
-            foreach ($reel as $s_item) {
-                if (!empty($s_item['video_versions'])) {
+
+    // Method 1: Specific Story Item ID (e.g. stories/username/1234567890)
+    if (!empty($story_id)) {
+        $api_url = "https://i.instagram.com/api/v1/media/{$story_id}/info/";
+        $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
+        if ($res['code'] === 200 && !empty($res['body'])) {
+            $data = json_decode($res['body'], true);
+            $item = $data['items'][0] ?? null;
+            if ($item) {
+                $is_video = !empty($item['video_versions']);
+                $video_url = $item['video_versions'][0]['url'] ?? '';
+                $thumb_url = $item['image_versions2']['candidates'][0]['url'] ?? '';
+                $author = $item['user']['username'] ?? $username;
+                $full_name = $item['user']['full_name'] ?? '';
+
+                $media_list = [];
+                if ($is_video && !empty($video_url)) {
                     $media_list[] = [
                         'type' => 'video',
-                        'quality' => 'Story Video (MP4)',
-                        'url' => $s_item['video_versions'][0]['url'],
-                        'proxy_url' => 'download.php?type=video&url=' . base64_encode($s_item['video_versions'][0]['url'])
-                    ];
-                } else if (!empty($s_item['image_versions2']['candidates'])) {
-                    $media_list[] = [
-                        'type' => 'image',
-                        'quality' => 'Story Photo (JPG)',
-                        'url' => $s_item['image_versions2']['candidates'][0]['url'],
-                        'proxy_url' => 'download.php?type=image&url=' . base64_encode($s_item['image_versions2']['candidates'][0]['url'])
+                        'quality' => 'Story Video HD (MP4)',
+                        'url' => $video_url,
+                        'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id) . '&url=' . base64_encode($video_url)
                     ];
                 }
+                if (!empty($thumb_url)) {
+                    $media_list[] = [
+                        'type' => 'image',
+                        'quality' => $is_video ? 'Story Poster (JPG)' : 'Story Photo HD (JPG)',
+                        'url' => $thumb_url,
+                        'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id . '_img') . '&url=' . base64_encode($thumb_url)
+                    ];
+                }
+
+                return [
+                    'type' => 'story',
+                    'author' => '@' . $author . ($full_name ? " ({$full_name})" : ''),
+                    'caption' => '✨ Instagram Story by @' . $author . ' (Ready to Download)',
+                    'thumbnail' => $thumb_url,
+                    'download_url' => $is_video ? $video_url : $thumb_url,
+                    'media' => $media_list
+                ];
             }
-            return [
-                'type' => 'story',
-                'author' => $username,
-                'media' => $media_list
+        }
+    }
+
+    // Method 2: Handle highlights (stories/highlights/123456789)
+    if (strtolower($username) === 'highlights' && !empty($story_id)) {
+        $reel_key = "highlight:{$story_id}";
+        $api_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$reel_key}";
+        $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
+        if ($res['code'] === 200 && !empty($res['body'])) {
+            $data = json_decode($res['body'], true);
+            $items = $data['reels'][$reel_key]['items'] ?? [];
+            if (!empty($items)) {
+                return parse_story_items($items, 'Highlight');
+            }
+        }
+    }
+
+    // Method 3: Fetch all active stories for user by resolving User ID
+    $user_id = null;
+    $profile_url = "https://www.instagram.com/" . urlencode($username) . "/";
+    $p_res = make_curl_request($profile_url, [
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+    ], null, $cookies);
+
+    if ($p_res['code'] === 200 && !empty($p_res['body'])) {
+        if (preg_match('/"props":{"id":"([0-9]+)"/i', $p_res['body'], $m) || 
+            preg_match('/"user_id":"([0-9]+)"/i', $p_res['body'], $m) ||
+            preg_match('/"id":"([0-9]{5,25})"/i', $p_res['body'], $m)) {
+            $user_id = $m[1];
+        }
+    }
+
+    if ($user_id) {
+        $reels_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$user_id}";
+        $r_res = make_curl_request($reels_url, $mobile_headers, null, $cookies);
+        if ($r_res['code'] === 200 && !empty($r_res['body'])) {
+            $r_data = json_decode($r_res['body'], true);
+            $items = $r_data['reels'][$user_id]['items'] ?? [];
+            if (!empty($items)) {
+                return parse_story_items($items, $username);
+            }
+        }
+    }
+
+    return null;
+}
+
+// Helper to parse multiple story items from reels_media
+function parse_story_items($items, $username) {
+    $media_list = [];
+    foreach ($items as $idx => $s_item) {
+        $num = $idx + 1;
+        $s_id = $s_item['pk'] ?? $s_item['id'] ?? $num;
+        if (!empty($s_item['video_versions'])) {
+            $v_url = $s_item['video_versions'][0]['url'];
+            $media_list[] = [
+                'type' => 'video',
+                'quality' => "Story {$num} (Video MP4)",
+                'url' => $v_url,
+                'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_Story_{$username}_{$s_id}") . '&url=' . base64_encode($v_url)
+            ];
+        } else if (!empty($s_item['image_versions2']['candidates'])) {
+            $i_url = $s_item['image_versions2']['candidates'][0]['url'];
+            $media_list[] = [
+                'type' => 'image',
+                'quality' => "Story {$num} (Photo JPG)",
+                'url' => $i_url,
+                'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_Story_{$username}_{$s_id}") . '&url=' . base64_encode($i_url)
             ];
         }
+    }
+
+    if (!empty($media_list)) {
+        $first = $media_list[0];
+        $author = $items[0]['user']['username'] ?? $username;
+        $full_name = $items[0]['user']['full_name'] ?? '';
+        return [
+            'type' => 'story',
+            'author' => '@' . $author . ($full_name ? " ({$full_name})" : ''),
+            'caption' => count($media_list) . ' Active Stories found for @' . $author,
+            'thumbnail' => $first['url'],
+            'download_url' => $first['url'],
+            'media' => $media_list
+        ];
     }
     return null;
 }
@@ -509,17 +608,22 @@ if (!empty($raw_input)) {
 $input_url = trim($post['url'] ?? $post['link'] ?? $_GET['url'] ?? $_GET['link'] ?? '');
 
 if (empty($input_url)) {
-    json_fail('કૃપા કરીને માન્ય Instagram લિંક અથવા યુઝરનેમ દાખલ કરો (Please provide a valid Instagram URL or Username).');
+    json_fail('Please provide a valid Instagram URL or Username.');
 }
 
 // Auto-detect input type
-// 1. Stories: instagram.com/stories/username/12345
-if (preg_match('/instagram\.com\/stories\/([A-Za-z0-9._-]+)(?:\/([0-9]+))?/i', $input_url, $m)) {
-    $username = $m[1];
-    $story_id = $m[2] ?? null;
+// 1. Stories: instagram.com/stories/username/12345 or /stories/highlights/12345
+if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-]+)(?:\/([0-9]+))?)/i', $input_url, $m)) {
+    if (!empty($m[1])) {
+        $username = 'highlights';
+        $story_id = $m[1];
+    } else {
+        $username = $m[2];
+        $story_id = $m[3] ?? null;
+    }
     $res = fetch_instagram_story($username, $story_id);
     if ($res) json_success($res);
-    json_fail('સ્ટોરી મળી શકી નથી અથવા એકાઉન્ટ પ્રાઇવેટ છે (Story not found or account is private).');
+    json_fail('Story not found or the account is private.');
 }
 
 // 2. Reels: instagram.com/reel/SHORTCODE or /reels/SHORTCODE
@@ -557,7 +661,7 @@ if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url
         ]);
     }
 
-    json_fail('આ રીલ મેળવી શકાઈ નથી. ખાતરી કરો કે એકાઉન્ટ પબ્લિક છે. અથવા config.php માં RAPIDAPI_KEY સેટ કરો.', 404);
+    json_fail('Unable to fetch this Reel. Please make sure the post or account is public.', 404);
 }
 
 // 3. Posts / Photos: instagram.com/p/SHORTCODE or /tv/SHORTCODE
@@ -588,7 +692,7 @@ if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $input_url, $m))
         ]);
     }
 
-    json_fail('આ પોસ્ટ ડાઉનલોડ થઈ શકી નથી. ખાતરી કરો કે પોસ્ટ પબ્લિક છે.', 404);
+    json_fail('Unable to download this post. Please make sure the post is public.', 404);
 }
 
 // 4. DP / Profile: @username or instagram.com/username
@@ -623,8 +727,8 @@ if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $input_url, $m) ||
             ]);
         }
 
-        json_fail('પ્રોફાઇલ મળી શકી નથી અથવા વપરાશકર્તા અસ્તિત્વમાં નથી (@' . htmlspecialchars($username) . ').', 404);
+        json_fail('Profile not found or user does not exist (@' . htmlspecialchars($username) . ').', 404);
     }
 }
 
-json_fail('માન્ય Instagram URL દાખલ કરો (દા.ત. Reels, DP, Post, અથવા Story લિંક).');
+json_fail('Please enter a valid Instagram URL (e.g. Reels, DP, Post, or Story link).');

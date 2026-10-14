@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
 
         if (!url) {
-            showError('કૃપા કરીને માન્ય Instagram લિંક પેસ્ટ કરો (Please paste an Instagram link).');
+            showError('Please paste a valid Instagram link.');
             urlInput.focus();
             return;
         }
@@ -173,9 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Animated loader status messages
         const statuses = [
-            'Instagram લિંક ચેક થઈ રહી છે...',
-            'HD મીડિયા સ્ટીમ મેળવી રહ્યા છીએ...',
-            'ડાઉનલોડ લિંક્સ તૈયાર કરી રહ્યા છીએ...'
+            'Checking Instagram link...',
+            'Fetching HD media stream...',
+            'Preparing download links...'
         ];
         let statusIdx = 0;
         loaderStatus.textContent = statuses[0];
@@ -204,14 +204,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.status === 'success' && res.data) {
                 renderResult(res.data);
             } else {
-                showError(res.message || 'માહિતી મેળવવામાં સમસ્યા આવી. કૃપા કરીને લિંક ફરીથી તપાસો.');
+                showError(res.message || 'Unable to fetch media. Please check the link and try again.');
             }
         } catch (error) {
             clearInterval(statusTimer);
             loaderCard.style.display = 'none';
             submitBtn.disabled = false;
             submitBtnText.textContent = 'Search';
-            showError('સર્વર સાથે કનેક્ટ થવામાં સમસ્યા આવી. કૃપા કરીને થોડીવાર પછી પ્રયાસ કરો.');
+            showError('Unable to connect to server. Please try again in a moment.');
         }
     });
 
