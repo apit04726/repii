@@ -15,7 +15,7 @@ define('RAPIDAPI_KEY', '');
 define('RAPIDAPI_HOST', 'instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com');
 
 // Primary Instagram Session Cookie (sessionid)
-define('INSTAGRAM_SESSION_ID', '38251868688%3AuCw1iASW46sUYZ%3A20%3AAYk1c7um2NXec_c4uGP19E7EviPs3jvWbWkyByJOaQ');
+define('INSTAGRAM_SESSION_ID', '38251868688%3AE9meNLI2lgLBU3%3A5%3AAYkYRmRjvsjSEZ11wvtpwHNo5DU65mU0Ns9ZJ2ny9w');
 define('INSTAGRAM_CSRF_TOKEN', 'X5kJG1udcL5Z1qnr3VimY9cMG202eQBy');
 define('INSTAGRAM_DS_USER_ID', '38251868688');
 
@@ -23,7 +23,7 @@ define('INSTAGRAM_DS_USER_ID', '38251868688');
 // Automatically fails over across active accounts
 define('INSTAGRAM_SESSION_POOL', [
     [
-        'session_id' => '38251868688%3AuCw1iASW46sUYZ%3A20%3AAYk1c7um2NXec_c4uGP19E7EviPs3jvWbWkyByJOaQ',
+        'session_id' => '38251868688%3AE9meNLI2lgLBU3%3A5%3AAYkYRmRjvsjSEZ11wvtpwHNo5DU65mU0Ns9ZJ2ny9w',
         'csrf_token' => 'X5kJG1udcL5Z1qnr3VimY9cMG202eQBy',
         'ds_user_id' => '38251868688'
     ],

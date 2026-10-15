@@ -244,67 +244,125 @@ function fetch_instagram_dp($username) {
     $username = preg_replace('/[^a-zA-Z0-9._]/', '', $username);
     if (empty($username)) return null;
 
-    $cookies = '';
-    if (!empty(INSTAGRAM_SESSION_ID)) {
-        $cookies = 'sessionid=' . INSTAGRAM_SESSION_ID . '; csrftoken=' . INSTAGRAM_CSRF_TOKEN;
+    $sessions = get_instagram_session_pool();
+    if (empty($sessions)) {
+        $sessions = [['session_id' => '', 'csrf_token' => '', 'ds_user_id' => '']];
     }
 
-    // Try web profile info endpoint
-    $api_url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
-    $headers = [
-        'X-IG-App-ID: 936619743392459',
-        'X-Requested-With: XMLHttpRequest',
-        'Referer: https://www.instagram.com/' . urlencode($username) . '/'
-    ];
-    
-    $res = make_curl_request($api_url, $headers, null, $cookies);
-    if ($res['code'] === 200 && !empty($res['body'])) {
-        $json = json_decode($res['body'], true);
-        $user = $json['data']['user'] ?? null;
-        if ($user) {
-            $hd_pic = $user['profile_pic_url_hd'] ?? $user['profile_pic_url'] ?? '';
-            return [
-                'type' => 'dp',
-                'username' => $user['username'] ?? $username,
-                'full_name' => $user['full_name'] ?? '',
-                'biography' => $user['biography'] ?? '',
-                'followers' => $user['edge_followed_by']['count'] ?? 0,
-                'following' => $user['edge_follow']['count'] ?? 0,
-                'posts_count' => $user['edge_owner_to_timeline_media']['count'] ?? 0,
-                'is_verified' => $user['is_verified'] ?? false,
-                'is_private' => $user['is_private'] ?? false,
-                'thumbnail' => $hd_pic,
-                'download_url' => $hd_pic,
-                'media' => [
-                    [
-                        'type' => 'image',
-                        'quality' => 'HD Quality',
-                        'url' => $hd_pic,
-                        'proxy_url' => 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic)
-                    ]
-                ]
-            ];
+    foreach ($sessions as $sess) {
+        $cookies = get_session_cookies($sess);
+
+        // 1. Try web profile info endpoint
+        $api_url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
+        $headers = [
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'X-IG-App-ID: 936619743392459',
+            'X-Requested-With: XMLHttpRequest',
+            'Referer: https://www.instagram.com/' . urlencode($username) . '/'
+        ];
+        
+        $res = make_curl_request($api_url, $headers, null, $cookies);
+        if ($res['code'] === 200 && !empty($res['body'])) {
+            $json = json_decode($res['body'], true);
+            $user = $json['data']['user'] ?? null;
+            if ($user) {
+                $hd_pic = $user['profile_pic_url_hd'] ?? $user['profile_pic_url'] ?? '';
+                if (!empty($hd_pic)) {
+                    $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
+                    $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
+                    return [
+                        'type' => 'dp',
+                        'username' => $user['username'] ?? $username,
+                        'full_name' => $user['full_name'] ?? '',
+                        'biography' => $user['biography'] ?? '',
+                        'followers' => $user['edge_followed_by']['count'] ?? 0,
+                        'following' => $user['edge_follow']['count'] ?? 0,
+                        'posts_count' => $user['edge_owner_to_timeline_media']['count'] ?? 0,
+                        'is_verified' => $user['is_verified'] ?? false,
+                        'is_private' => $user['is_private'] ?? false,
+                        'thumbnail' => $hd_pic,
+                        'preview_url' => $preview_url,
+                        'download_url' => $hd_pic,
+                        'media' => [
+                            [
+                                'type' => 'image',
+                                'quality' => 'Full HD Profile Picture (1080p)',
+                                'url' => $hd_pic,
+                                'proxy_url' => $proxy_url
+                            ]
+                        ]
+                    ];
+                }
+            }
+        }
+
+        // 2. Try mobile search API (highly reliable, returns DP even when web profile info is rate-limited)
+        $search_url = "https://i.instagram.com/api/v1/users/search/?q=" . urlencode($username);
+        $m_headers = [
+            'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
+            'X-IG-App-ID: 936619743392459',
+            'Accept-Language: en-US,en;q=0.9',
+            'Accept: */*'
+        ];
+        $s_res = make_curl_request($search_url, $m_headers, null, $cookies);
+        if ($s_res['code'] === 200 && !empty($s_res['body'])) {
+            $s_data = json_decode($s_res['body'], true);
+            foreach ($s_data['users'] ?? [] as $u) {
+                if (strtolower($u['username'] ?? '') === strtolower($username)) {
+                    $pic = $u['profile_pic_url'] ?? '';
+                    if (!empty($pic)) {
+                        $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic);
+                        $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic);
+                        return [
+                            'type' => 'dp',
+                            'username' => $u['username'],
+                            'full_name' => $u['full_name'] ?? $u['username'],
+                            'biography' => ($u['is_verified'] ? 'Verified Official Profile' : 'Instagram Profile') . ' • @' . $u['username'],
+                            'followers' => 0,
+                            'following' => 0,
+                            'posts_count' => 0,
+                            'is_verified' => $u['is_verified'] ?? false,
+                            'is_private' => $u['is_private'] ?? false,
+                            'thumbnail' => $pic,
+                            'preview_url' => $preview_url,
+                            'download_url' => $pic,
+                            'media' => [
+                                [
+                                    'type' => 'image',
+                                    'quality' => 'Full HD Profile Picture (1080p)',
+                                    'url' => $pic,
+                                    'proxy_url' => $proxy_url
+                                ]
+                            ]
+                        ];
+                    }
+                }
+            }
         }
     }
 
-    // Fallback: scrape profile page
+    // 3. Fallback: scrape profile page
     $profile_url = "https://www.instagram.com/{$username}/";
-    $p_res = make_curl_request($profile_url, [], null, $cookies);
+    $p_res = make_curl_request($profile_url, [], null, $cookies ?? '');
     if ($p_res['code'] === 200 && !empty($p_res['body'])) {
         if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $p_res['body'], $m)) {
             $pic = html_entity_decode($m[1]);
+            $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic);
+            $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic);
             return [
                 'type' => 'dp',
                 'username' => $username,
                 'full_name' => $username,
+                'biography' => 'Instagram Profile • @' . $username,
                 'thumbnail' => $pic,
+                'preview_url' => $preview_url,
                 'download_url' => $pic,
                 'media' => [
                     [
                         'type' => 'image',
                         'quality' => 'HD Profile Picture',
                         'url' => $pic,
-                        'proxy_url' => 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic)
+                        'proxy_url' => $proxy_url
                     ]
                 ]
             ];

@@ -5,6 +5,7 @@ require_once __DIR__ . '/config.php';
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
     <script>
         (function() {
             try {
@@ -331,7 +332,7 @@ require_once __DIR__ . '/config.php';
                 <div class="result-header">
                     <span id="resultTypeBadge" class="result-type-badge">REEL HD</span>
                     <div class="result-author">
-                        <img id="resultAuthorAvatar" class="result-author-avatar" src="" alt="Avatar">
+                        <img id="resultAuthorAvatar" class="result-author-avatar" src="" alt="Avatar" referrerpolicy="no-referrer">
                         <span id="resultAuthorName">@instagram</span>
                     </div>
                 </div>
@@ -399,7 +400,7 @@ require_once __DIR__ . '/config.php';
                             <img src="assets/img/guide-step-1.png" alt="Step 1: Copy Instagram Reel Link and Paste in InstaGo" class="step-guide-img" loading="lazy" decoding="async">
                         </div>
                     </div>
-                    <h3 id="stepTitle1">Copy &amp; Paste Link</h3>
+                    <h3 id="stepTitle1">Copy & Paste Link</h3>
                     <p id="stepDesc1">Copy any Instagram Reel link and tap <strong>"Paste"</strong> in InstaGo. Our smart engine auto-detects the link immediately.</p>
                 </div>
 
@@ -420,7 +421,7 @@ require_once __DIR__ . '/config.php';
                             <img src="assets/img/guide-step-2.png" alt="Step 2: Auto-Fetch Media Details and Preview" class="step-guide-img" loading="lazy" decoding="async">
                         </div>
                     </div>
-                    <h3 id="stepTitle2">Auto-Fetch &amp; Preview</h3>
+                    <h3 id="stepTitle2">Auto-Fetch & Preview</h3>
                     <p id="stepDesc2">InstaGo instantly connects to Instagram CDN to generate high-resolution video preview with complete creator details.</p>
                 </div>
 
@@ -767,13 +768,39 @@ require_once __DIR__ . '/config.php';
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <div class="footer-top">
-                <div class="footer-disclaimer" id="footerDisclaimer">
-                    <strong>Disclaimer:</strong> InstaGo is an independent tool and is not affiliated, endorsed, or associated with Instagram, Meta, or Facebook. We do not host any copyrighted videos or photos on our servers; all media files are served directly from official CDN servers.
+            <div class="footer-grid">
+                <!-- Brand & Disclaimer Column -->
+                <div class="footer-brand-col">
+                    <a href="./" class="footer-brand" aria-label="InstaGo Home">
+                        <div class="brand-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                            </svg>
+                        </div>
+                        <span class="footer-brand-name">InstaGo</span>
+                    </a>
+
+                    <p class="footer-tagline">
+                        The fastest, 100% anonymous &amp; watermark-free Instagram media downloader. Save HD Reels, Stories, DP, and Photos in 1080p.
+                    </p>
+
+                    <div class="footer-disclaimer" id="footerDisclaimer">
+                        <strong>Disclaimer:</strong> InstaGo is an independent tool and is not affiliated, endorsed, or associated with Instagram, Meta, or Facebook. We do not host any copyrighted videos or photos on our servers; all media files are served directly from official CDN servers.
+                    </div>
+
+                    <div class="footer-trust-chips">
+                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 100% Free Forever</span>
+                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> No Login Required</span>
+                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Zero Watermark</span>
+                    </div>
                 </div>
+
+                <!-- Navigation Columns -->
                 <div class="footer-nav-columns">
                     <div class="footer-nav-col">
-                        <h4>Instagram Tools</h4>
+                        <h4 class="footer-col-title">Instagram Tools</h4>
                         <ul class="footer-links">
                             <li><a href="#searchForm" id="footLinkReels">Reels Downloader</a></li>
                             <li><a href="#searchForm" id="footLinkDP">DP Downloader</a></li>
@@ -781,31 +808,54 @@ require_once __DIR__ . '/config.php';
                             <li><a href="#searchForm" id="footLinkPhotos">Photo Downloader</a></li>
                         </ul>
                     </div>
+
                     <div class="footer-nav-col">
-                        <h4>Legal &amp; Policy</h4>
+                        <h4 class="footer-col-title">Device Guides</h4>
+                        <ul class="footer-links">
+                            <li><a href="#deviceGuide">iPhone &amp; iPad</a></li>
+                            <li><a href="#deviceGuide">Android</a></li>
+                            <li><a href="#deviceGuide">Windows PC</a></li>
+                            <li><a href="#deviceGuide">Mac OS</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="footer-nav-col">
+                        <h4 class="footer-col-title">Legal &amp; Policy</h4>
                         <ul class="footer-links">
                             <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="privacy">Privacy Policy</a></li>
                             <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="terms">Terms of Service</a></li>
                             <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="about">About Us</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="contact">Contact Us</a></li>
+                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="contact">Contact &amp; DMCA</a></li>
                         </ul>
                     </div>
                 </div>
             </div>
 
-            <!-- Social Share Bar (Matching indown.io) -->
+            <!-- Social Share Bar -->
             <div class="footer-share-bar">
-                <span>Share InstaGo with Friends:</span>
+                <div class="share-bar-label">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    <span>Share InstaGo with Friends:</span>
+                </div>
                 <div class="share-chips">
-                    <a href="https://api.whatsapp.com/send?text=Download%20Instagram%20Reels%20in%20Full%20HD%20free%20at%20<?= urlencode(SITE_URL) ?>" target="_blank" rel="noopener" class="share-btn whatsapp" title="Share on WhatsApp">WhatsApp</a>
-                    <a href="https://t.me/share/url?url=<?= urlencode(SITE_URL) ?>&text=Download%20Instagram%20Reels%20in%20Full%20HD" target="_blank" rel="noopener" class="share-btn telegram" title="Share on Telegram">Telegram</a>
-                    <a href="https://twitter.com/intent/tweet?url=<?= urlencode(SITE_URL) ?>&text=Download%20Instagram%20Reels%20in%201080p%20HD" target="_blank" rel="noopener" class="share-btn twitter" title="Share on X">X / Twitter</a>
-                    <a href="https://www.facebook.com/sharer/sharer.php?u=<?= urlencode(SITE_URL) ?>" target="_blank" rel="noopener" class="share-btn facebook" title="Share on Facebook">Facebook</a>
+                    <a href="https://api.whatsapp.com/send?text=Download%20Instagram%20Reels%20in%20Full%20HD%20free%20at%20<?= urlencode(SITE_URL) ?>" target="_blank" rel="noopener" class="share-btn whatsapp" title="Share on WhatsApp" aria-label="Share on WhatsApp">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.53 7.34C9.36 7.34 9.09 7.4 8.87 7.65C8.65 7.89 8.02 8.49 8.02 9.71C8.02 10.93 8.91 12.11 9.03 12.28C9.16 12.45 10.74 14.9 13.18 15.95C15.21 16.83 15.62 16.65 16.07 16.61C16.51 16.57 17.5 16.02 17.7 15.44C17.91 14.87 17.91 14.38 17.85 14.28C17.78 14.17 17.61 14.11 17.35 13.98C17.09 13.85 15.82 13.23 15.58 13.14C15.35 13.06 15.18 13.01 15.01 13.27C14.84 13.53 14.36 14.11 14.21 14.28C14.07 14.45 13.92 14.47 13.66 14.34C13.4 14.21 12.56 13.94 11.57 13.05C10.79 12.36 10.27 11.5 10.14 11.28C10.01 11.06 10.12 10.94 10.25 10.81C10.37 10.7 10.51 10.51 10.65 10.36C10.78 10.2 10.83 10.09 10.92 9.92C11 9.75 10.96 9.61 10.9 9.48C10.83 9.35 10.31 8.08 10.09 7.56C9.88 7.05 9.66 7.12 9.53 7.34Z"/></svg>
+                    </a>
+                    <a href="https://t.me/share/url?url=<?= urlencode(SITE_URL) ?>&text=Download%20Instagram%20Reels%20in%20Full%20HD" target="_blank" rel="noopener" class="share-btn telegram" title="Share on Telegram" aria-label="Share on Telegram">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                    </a>
+                    <a href="https://twitter.com/intent/tweet?url=<?= urlencode(SITE_URL) ?>&text=Download%20Instagram%20Reels%20in%201080p%20HD" target="_blank" rel="noopener" class="share-btn twitter" title="Share on X (Twitter)" aria-label="Share on X (Twitter)">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                    </a>
+                    <a href="https://www.facebook.com/sharer/sharer.php?u=<?= urlencode(SITE_URL) ?>" target="_blank" rel="noopener" class="share-btn facebook" title="Share on Facebook" aria-label="Share on Facebook">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                    </a>
                 </div>
             </div>
 
+            <!-- Bottom Copyright -->
             <div class="footer-bottom">
-                <p id="footerCopyright">&copy; <?php echo date('Y'); ?> <strong>InstaGo</strong>. All rights reserved. Fast & Simple Instagram Downloader.</p>
+                <p id="footerCopyright">&copy; <?php echo date('Y'); ?> <strong>InstaGo</strong>. All rights reserved. Fast &amp; Simple Instagram Downloader.</p>
             </div>
         </div>
     </footer>

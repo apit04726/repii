@@ -65,20 +65,29 @@ curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header_line) use (&$co
     return strlen($header_line);
 });
 
-// Set download headers
-header('Content-Description: File Transfer');
-header('Content-Type: ' . $mime);
-header('Content-Disposition: attachment; filename="' . $filename . '"');
-header('Expires: 0');
-header('Cache-Control: must-revalidate');
-header('Pragma: public');
+$is_preview = isset($_GET['preview']) || isset($_GET['view']);
+
+// Set headers
+if ($is_preview) {
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: inline');
+    header('Cache-Control: public, max-age=86400');
+    header('X-Content-Type-Options: nosniff');
+} else {
+    header('Content-Description: File Transfer');
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Expires: 0');
+    header('Cache-Control: must-revalidate');
+    header('Pragma: public');
+}
 
 // Stream directly to client
 curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-if ($http_code >= 400) {
+if ($http_code >= 400 && !$is_preview) {
     // If CDN failed directly, redirect user to the source URL as last resort
     header_remove('Content-Disposition');
     header("Location: " . $url);

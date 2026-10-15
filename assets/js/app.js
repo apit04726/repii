@@ -341,10 +341,21 @@ document.addEventListener('DOMContentLoaded', () => {
         typeBadge.textContent = (data.type || 'Media').toUpperCase();
         authorName.textContent = data.author || (data.username ? '@' + data.username : 'Instagram Media');
         
-        if (data.type === 'dp' && data.thumbnail) {
-            authorAvatar.src = data.thumbnail;
+        if (data.type === 'dp' && (data.preview_url || data.thumbnail)) {
+            authorAvatar.referrerPolicy = 'no-referrer';
+            authorAvatar.src = data.preview_url || data.thumbnail;
+            authorAvatar.onerror = function() {
+                if (data.preview_url && this.src !== data.preview_url) {
+                    this.src = data.preview_url;
+                } else if (data.thumbnail && this.src !== data.thumbnail) {
+                    this.src = data.thumbnail;
+                } else {
+                    this.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="%23ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
+                }
+            };
         } else {
-            authorAvatar.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
+            authorAvatar.referrerPolicy = 'no-referrer';
+            authorAvatar.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="%23ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
         }
 
         // Caption / Bio
@@ -358,14 +369,26 @@ document.addEventListener('DOMContentLoaded', () => {
             videoElem.className = 'media-preview-video';
             videoElem.controls = true;
             videoElem.playsInline = true;
+            videoElem.preload = 'metadata';
             if (data.thumbnail) videoElem.poster = data.thumbnail;
             videoElem.src = videoUrl;
             mediaContainer.appendChild(videoElem);
         } else {
             const imgElem = document.createElement('img');
             imgElem.className = 'media-preview-img';
-            imgElem.alt = 'Instagram Media Preview';
-            imgElem.src = data.thumbnail || data.download_url;
+            imgElem.alt = data.full_name || (data.username ? '@' + data.username : 'Instagram Media Preview');
+            imgElem.referrerPolicy = 'no-referrer';
+            const initialSrc = data.preview_url || data.thumbnail || data.download_url;
+            imgElem.src = initialSrc;
+            imgElem.onerror = function() {
+                if (data.preview_url && this.src !== data.preview_url) {
+                    this.src = data.preview_url;
+                } else if (data.thumbnail && this.src !== data.thumbnail) {
+                    this.src = data.thumbnail;
+                } else if (data.download_url && this.src !== data.download_url) {
+                    this.src = data.download_url;
+                }
+            };
             mediaContainer.appendChild(imgElem);
         }
 
@@ -386,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
                     : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
                 
-                const labelText = t ? (m.type === 'video' ? t.results.downloadVideo : t.results.downloadImage) : `Download ${m.quality || (m.type === 'video' ? 'Video (MP4)' : 'Image (JPG)')}`;
+                const labelText = t ? (m.type === 'video' ? t.results.downloadVideo : t.results.downloadImage) : (data.type === 'dp' ? 'Download Profile Picture (HD)' : `Download ${m.quality || (m.type === 'video' ? 'Video (MP4)' : 'Image (JPG)')}`);
                 btn.innerHTML = `${iconSvg} <span>${labelText}</span>`;
                 downloadOptions.appendChild(btn);
             });
@@ -516,9 +539,9 @@ document.addEventListener('DOMContentLoaded', () => {
             guide: {
                 heading: 'How to Download from Instagram',
                 subheading: 'Save any Reel, Profile DP, Story or Photo in 3 easy steps',
-                step1Title: 'Copy &amp; Paste Link',
+                step1Title: 'Copy & Paste Link',
                 step1Desc: 'Copy any Instagram Reel link and tap <strong>"Paste"</strong> in InstaGo. Our smart engine auto-detects the link immediately.',
-                step2Title: 'Auto-Fetch &amp; Preview',
+                step2Title: 'Auto-Fetch & Preview',
                 step2Desc: 'InstaGo instantly connects to Instagram CDN to generate high-resolution video preview with complete creator details.',
                 step3Title: 'Save in 1080p Full HD',
                 step3Desc: 'Tap <strong>"Download Video (MP4 HD)"</strong> to save the crystal-clear original video without any watermark directly to your device.',
