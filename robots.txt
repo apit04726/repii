@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /api.php
+Disallow: /download.php
+Disallow: /config.php
+
+User-agent: Mediapartners-Google
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+Sitemap: sitemap.xml

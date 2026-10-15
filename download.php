@@ -35,6 +35,30 @@ if (!$url || !preg_match('/^https?:\/\//i', $url)) {
     die("Error: Invalid media URL");
 }
 
+// Strict SSRF Protection: Validate Host against authorized Instagram / Meta CDNs
+$parsed_host = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
+$allowed_domains = [
+    'cdninstagram.com',
+    'fbcdn.net',
+    'instagram.com',
+    'facebook.com',
+    'akamaihd.net',
+    'unsplash.com'
+];
+
+$is_allowed = false;
+foreach ($allowed_domains as $d) {
+    if ($parsed_host === $d || str_ends_with($parsed_host, '.' . $d)) {
+        $is_allowed = true;
+        break;
+    }
+}
+
+if (!$is_allowed) {
+    http_response_code(403);
+    die("Error: Unauthorized media host");
+}
+
 // Determine file extension and MIME type
 $ext = ($type === 'audio') ? 'mp3' : (($type === 'image' || $type === 'dp') ? 'jpg' : 'mp4');
 $mime = ($type === 'audio') ? 'audio/mpeg' : (($type === 'image' || $type === 'dp') ? 'image/jpeg' : 'video/mp4');

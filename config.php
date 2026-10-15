@@ -4,6 +4,12 @@
  * Instagram Reels, DP, Stories & Photos Downloader
  */
 
+// Direct access prevention
+if (basename($_SERVER['PHP_SELF'] ?? '') === basename(__FILE__)) {
+    http_response_code(403);
+    exit('Access Denied');
+}
+
 // Site Details
 define('SITE_NAME', 'InstaGo');
 define('SITE_TAGLINE', 'Fastest Instagram Reels, DP & Stories Downloader');

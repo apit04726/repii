@@ -7,11 +7,44 @@
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-Requested-With');
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit(0);
 }
+
+// IP-based Rate Limiter (Max 60 requests/min to protect Instagram sessions & prevent DoS)
+$client_ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+if (strpos($client_ip, ',') !== false) {
+    $client_ip = trim(explode(',', $client_ip)[0]);
+}
+$client_ip = preg_replace('/[^a-zA-Z0-9_.:-]/', '', $client_ip);
+$rate_file = sys_get_temp_dir() . '/instago_rl_' . md5($client_ip) . '.json';
+$now = time();
+$timestamps = [];
+if (file_exists($rate_file)) {
+    $raw_rate = @file_get_contents($rate_file);
+    if ($raw_rate) {
+        $parsed = json_decode($raw_rate, true);
+        if (is_array($parsed)) {
+            $timestamps = array_filter($parsed, function($t) use ($now) {
+                return ($now - $t) < 60;
+            });
+        }
+    }
+}
+if (count($timestamps) >= 60) {
+    http_response_code(429);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Rate limit exceeded. Too many requests. Please wait a minute and try again.'
+    ], JSON_UNESCAPED_SLASHES);
+    exit;
+}
+$timestamps[] = $now;
+@file_put_contents($rate_file, json_encode($timestamps), LOCK_EX);
 
 require_once __DIR__ . '/config.php';
 
