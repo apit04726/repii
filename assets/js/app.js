@@ -1037,10 +1037,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (osTabBtns.length > 0 && devicePanels.length > 0) {
         osTabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                const targetOS = btn.getAttribute('data-target');
+                const targetOS = btn.getAttribute('data-os') || btn.getAttribute('data-target');
                 osTabBtns.forEach(b => b.classList.toggle('active', b === btn));
                 devicePanels.forEach(p => {
-                    p.classList.toggle('active', p.id === `pane-dev-${targetOS}`);
+                    p.classList.toggle('active', p.id === `panel-${targetOS}` || p.id === `pane-dev-${targetOS}`);
                 });
             });
         });

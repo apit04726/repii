@@ -22,6 +22,9 @@
 
   /* Official Signature Instagram Gradient */
   --ig-grad: linear-gradient(135deg, #f58529 0%, #dd2a7b 52%, #8134af 100%);
+  --ig-gradient: linear-gradient(135deg, #f58529 0%, #dd2a7b 52%, #8134af 100%);
+  --ig-primary: #dd2a7b;
+  --text-main: var(--text-primary);
   --ig-grad-hover: linear-gradient(135deg, #ff943e 0%, #eb388b 52%, #953ebd 100%);
   --ig-glow: rgba(221, 42, 123, 0.38);
 
@@ -1852,7 +1855,7 @@ body {
   padding: 0.75rem 1.4rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
@@ -1861,32 +1864,46 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
+[data-theme="light"] .os-tab-btn {
+  background: #ffffff;
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
 .os-tab-btn svg {
   width: 18px;
   height: 18px;
-  stroke: currentColor;
+  fill: currentColor;
   transition: var(--transition);
 }
 
 .os-tab-btn:hover {
-  color: var(--text-main);
-  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text-primary);
+  border-color: rgba(221, 42, 123, 0.35);
   transform: translateY(-2px);
 }
 
 [data-theme="light"] .os-tab-btn:hover {
-  border-color: rgba(0, 0, 0, 0.2);
+  color: #0b132b;
+  border-color: rgba(221, 42, 123, 0.45);
 }
 
 .os-tab-btn.active {
-  background: var(--ig-gradient);
-  color: #ffffff;
-  border-color: transparent;
-  box-shadow: 0 6px 20px var(--ig-glow);
+  background: var(--ig-grad) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 6px 20px var(--ig-glow) !important;
+}
+
+.os-tab-btn.active span {
+  color: #ffffff !important;
 }
 
 .os-tab-btn.active svg {
-  stroke: #ffffff;
+  fill: #ffffff !important;
+  color: #ffffff !important;
+  stroke: none !important;
 }
 
 .device-panel {
