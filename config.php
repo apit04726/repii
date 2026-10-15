@@ -13,7 +13,9 @@ if (basename($_SERVER['PHP_SELF'] ?? '') === basename(__FILE__)) {
 // Site Details
 define('SITE_NAME', 'InstaGo');
 define('SITE_TAGLINE', 'Fastest Instagram Reels, DP & Stories Downloader');
-define('SITE_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost') . dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+$scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+if ($scriptDir === '/' || $scriptDir === '.') { $scriptDir = ''; }
+define('SITE_URL', rtrim((isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost') . $scriptDir, '/'));
 
 // Optional RapidAPI / Third-party API Key for ultra-high stability (Free tiers available on RapidAPI)
 // Leave empty to use direct built-in scrapers

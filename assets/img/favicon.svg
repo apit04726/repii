@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Ultra-Unique Velvet Aurora & Royal Neon Gradient -->
+    <linearGradient id="instagoAurora" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="25%" stop-color="#7c3aed" />
+      <stop offset="55%" stop-color="#d946ef" />
+      <stop offset="80%" stop-color="#ff007a" />
+      <stop offset="100%" stop-color="#ff6b00" />
+    </linearGradient>
+
+    <!-- Gloss & Depth Overlays -->
+    <linearGradient id="topGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.30" />
+      <stop offset="40%" stop-color="#ffffff" stop-opacity="0.05" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.25" />
+    </linearGradient>
+
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+
+    <filter id="shadowDepth" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Base Squircle -->
+  <rect x="24" y="24" width="464" height="464" rx="120" ry="120" fill="url(#instagoAurora)" />
+  <rect x="24" y="24" width="464" height="464" rx="120" ry="120" fill="url(#topGlow)" />
+  <circle cx="256" cy="256" r="210" fill="url(#centerGlow)" />
+
+  <!-- Modern Camera Outline -->
+  <rect x="108" y="108" width="296" height="296" rx="78" ry="78" fill="none" stroke="#ffffff" stroke-width="32" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadowDepth)" />
+
+  <!-- Top-Right Flash Indicator -->
+  <circle cx="340" cy="172" r="18" fill="#ffffff" />
+
+  <!-- Unique "InstaGo" Fast-Download Center Core: Download Arrow + Arc -->
+  <!-- Upper / Center Camera Lens Arc -->
+  <circle cx="256" cy="256" r="68" fill="none" stroke="#ffffff" stroke-width="26" stroke-opacity="0.4" />
+
+  <!-- Dynamic Download Arrow (Bold & Ultra-Visible at 16px/32px) -->
+  <path d="M256 182 L256 312" stroke="#ffffff" stroke-width="36" stroke-linecap="round" />
+  <path d="M208 266 L256 314 L304 266" fill="none" stroke="#ffffff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Bottom Catch Bar / Tray for Download -->
+  <path d="M192 344 L320 344" stroke="#ffffff" stroke-width="28" stroke-linecap="round" />
+</svg>

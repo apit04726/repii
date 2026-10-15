@@ -35,17 +35,32 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
     <link rel="canonical" href="<?= htmlspecialchars(SITE_URL . '/') ?>">
     
+    <!-- Favicon & Touch Icons -->
+    <link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg?v=2">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon-32x32.png?v=2">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/img/favicon-16x16.png?v=2">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/img/apple-touch-icon.png?v=2">
+    <link rel="shortcut icon" href="favicon.ico?v=2">
+
     <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="<?= htmlspecialchars(SITE_URL . '/') ?>">
     <meta property="og:title" content="Instagram Reels Video Download - InstaGo Reels Downloader">
     <meta property="og:description" content="Download Instagram Reels, HD Profile Pictures (DP), Stories, and Photos online for free in 1080p Full HD without watermark. Works on iPhone, Android, and PC.">
     <meta property="og:site_name" content="InstaGo">
+    <meta property="og:image" content="<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.png') ?>">
+    <meta property="og:image:secure_url" content="<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.png') ?>">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="InstaGo - Instagram Reels & Video Downloader in 1080p Full HD">
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Instagram Reels Video Download - InstaGo Reels Downloader">
     <meta name="twitter:description" content="Download Instagram Reels in 1080p Full HD without watermark fast, free, and anonymously.">
+    <meta name="twitter:image" content="<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.png') ?>">
+    <meta name="twitter:image:alt" content="InstaGo - Instagram Reels & Video Downloader in 1080p Full HD">
 
     <!-- Structured Data (Schema.org JSON-LD for Google Rich Snippets) -->
     <script type="application/ld+json">
@@ -53,6 +68,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
       "@context": "https://schema.org",
       "@type": "WebApplication",
       "name": "InstaGo Reels Downloader",
+      "image": "<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.png') ?>",
       "url": "<?= htmlspecialchars(SITE_URL . '/') ?>",
       "applicationCategory": "MultimediaApplication",
       "operatingSystem": "All (iOS, Android, Windows, macOS, Linux)",
