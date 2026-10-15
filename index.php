@@ -385,7 +385,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
                     <span>Smart Guide</span>
                 </div>
-                <h2 class="section-title" id="guideHeading">How to Download Instagram Reels Video?</h2>
+                <h2 class="section-title" id="guideHeading">How to Download from <span class="gradient-text">Instagram</span></h2>
                 <p class="section-subtitle" id="guideSubheading">Save any Reel, Profile DP, Story or Photo in 3 easy steps</p>
             </div>
 
@@ -483,7 +483,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         <!-- Ways to Download Instagram Reels Video by Device (Matching indown.io) -->
         <section class="section-device-guide" id="deviceGuide">
             <div class="section-heading">
-                <h2 class="section-title" id="waysHeading">Ways to Download Instagram Reels Video</h2>
+                <h2 class="section-title" id="waysHeading">Ways to Download <span class="gradient-text">Instagram Reels Video</span></h2>
                 <p class="section-subtitle" id="waysSubheading">Step-by-step instructions tailored for your smartphone or desktop</p>
                 
                 <!-- OS Selector Tabs -->
@@ -667,7 +667,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         <!-- Frequently Asked Questions (8 Comprehensive Questions like indown.io) -->
         <section class="section-faq">
             <div class="section-heading">
-                <h2 class="section-title" id="faqHeading">Frequently Asked Questions</h2>
+                <h2 class="section-title" id="faqHeading">Frequently Asked <span class="gradient-text">Questions</span></h2>
                 <p class="section-subtitle" id="faqSubheading">Got questions? We've got answers</p>
             </div>
 

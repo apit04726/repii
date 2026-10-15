@@ -537,7 +537,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetBtn: '↺ Download Another Link'
             },
             guide: {
-                heading: 'How to Download from Instagram',
+                heading: 'How to Download from <span class="gradient-text">Instagram</span>',
                 subheading: 'Save any Reel, Profile DP, Story or Photo in 3 easy steps',
                 step1Title: 'Copy & Paste Link',
                 step1Desc: 'Copy any Instagram Reel link and tap <strong>"Paste"</strong> in InstaGo. Our smart engine auto-detects the link immediately.',
@@ -572,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dev3: 'Windows PC & Mac'
             },
             faq: {
-                heading: 'Frequently Asked Questions',
+                heading: 'Frequently Asked <span class="gradient-text">Questions</span>',
                 subheading: "Got questions? We've got answers",
                 q1: 'Is InstaGo free to use?',
                 a1: 'Yes, InstaGo is 100% free with unlimited downloads. You do not need to purchase any subscription or install any third-party app.',
@@ -655,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetBtn: '↺ અન્ય લિંક ડાઉનલોડ કરો'
             },
             guide: {
-                heading: 'ઇન્સ્ટાગ્રામ પરથી કેવી રીતે ડાઉનલોડ કરવું?',
+                heading: 'ઇન્સ્ટાગ્રામ પરથી <span class="gradient-text">કેવી રીતે ડાઉનલોડ કરવું?</span>',
                 subheading: 'રીલ્સ, પ્રોફાઇલ DP, સ્ટોરી કે ફોટા ફક્ત 3 સરળ સ્ટેપ્સમાં સેવ કરો',
                 step1Title: 'લિંક કૉપી અને પેસ્ટ કરો',
                 step1Desc: 'ઇન્સ્ટાગ્રામ રીલ લિંક કૉપી કરો અને InstaGo માં <strong>"Paste"</strong> બટન દબાવો. અમારું સ્માર્ટ સિસ્ટમ તરત જ મીડિયા ઓળખી લેશે.',
@@ -690,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dev3: 'Windows PC અને Mac'
             },
             faq: {
-                heading: 'વારંવાર પૂછાતા પ્રશ્નો (FAQ)',
+                heading: 'વારંવાર પૂછાતા <span class="gradient-text">પ્રશ્નો (FAQ)</span>',
                 subheading: 'કોઈ સવાલ છે? અહીં જવાબ છે',
                 q1: 'શું InstaGo નો ઉપયોગ મફત છે?',
                 a1: 'હા, InstaGo અમર્યાદિત ડાઉનલોડ્સ સાથે 100% મફત છે. કોઈ સબસ્ક્રિપ્શન ખરીદવાની કે થર્ડ-પાર્ટી એપ ઇન્સ્ટોલ કરવાની જરૂર નથી.',
@@ -773,7 +773,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetBtn: '↺ अन्य लिंक डाउनलोड करें'
             },
             guide: {
-                heading: 'इंस्टाग्राम से कैसे डाउनलोड करें?',
+                heading: 'इंस्टाग्राम से <span class="gradient-text">कैसे डाउनलोड करें?</span>',
                 subheading: 'रील्स, प्रोफाइल DP, स्टोरी या फोटो सिर्फ 3 आसान स्टेप्स में सेव करें',
                 step1Title: 'लिंक कॉपी और पेस्ट करें',
                 step1Desc: 'इंस्टाग्राम रील लिंक कॉपी करें और InstaGo में <strong>"Paste"</strong> बटन दबाएं। हमारा स्मार्ट सिस्टम तुरंत वीडियो पहचान लेगा।',
@@ -808,7 +808,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dev3: 'Windows PC और Mac'
             },
             faq: {
-                heading: 'अक्सर पूछे जाने वाले सवाल (FAQ)',
+                heading: 'अक्सर पूछे जाने वाले <span class="gradient-text">सवाल (FAQ)</span>',
                 subheading: 'कोई सवाल है? यहाँ जवाब हैं',
                 q1: 'क्या InstaGo का इस्तेमाल पूरी तरह फ्री है?',
                 a1: 'हाँ, InstaGo अनलिमिटेड डाउनलोड के साथ 100% फ्री है। आपको कोई सब्सक्रिप्शन लेने या थर्ड-पार्टी ऐप इंस्टॉल करने की जरूरत नहीं है।',
@@ -910,7 +910,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lTitle) lTitle.textContent = t.loader.title;
 
         // 8. Guide Section
-        if (guideHeading) guideHeading.textContent = t.guide.heading;
+        if (guideHeading) guideHeading.innerHTML = t.guide.heading;
         if (guideSubheading) guideSubheading.textContent = t.guide.subheading;
         if (stepTitle1) stepTitle1.textContent = t.guide.step1Title;
         if (stepDesc1) stepDesc1.innerHTML = t.guide.step1Desc;
@@ -964,6 +964,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 10. FAQ Section
         const faqH = document.getElementById('faqHeading');
         const faqSub = document.getElementById('faqSubheading');
+        if (faqH) faqH.innerHTML = t.faq.heading;
         const faqQ1 = document.getElementById('faqQ1');
         const faqA1 = document.getElementById('faqA1');
         const faqQ2 = document.getElementById('faqQ2');

@@ -37,6 +37,11 @@ define('INSTAGRAM_SESSION_POOL', [
         'session_id' => '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9jLNltGiJinF4pGJRiZIbM2DmDtzd2iQ',
         'csrf_token' => '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd',
         'ds_user_id' => '22996724939'
+    ],
+    [
+        'session_id' => '23981181226%3ASgLOC93SLtYPnY%3A6%3AAYm__bhQx3VOMRpS6fIh_hPIUTa01RwQ7AnQGQUCSA',
+        'csrf_token' => 'XdOVXGN9vA3eHrUOwqxHlRTBHP5Ob0XI',
+        'ds_user_id' => '23981181226'
     ]
 ]);
 
