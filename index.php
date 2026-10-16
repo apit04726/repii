@@ -370,7 +370,30 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                     </div>
 
                     <div class="result-details">
-                        <p id="resultCaption" class="result-caption">Instagram Media Caption</p>
+                        <!-- Media Quick Specs for Single Media Mode -->
+                        <div id="reelQuickSpecs" class="reel-quick-specs">
+                            <span class="spec-pill">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                <span id="specRes">1080p Full HD</span>
+                            </span>
+                            <span class="spec-pill audio-pill">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                                <span>Original Audio</span>
+                            </span>
+                            <span class="spec-pill clean-pill">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                <span>Watermark-Free</span>
+                            </span>
+                        </div>
+
+                        <!-- Stylized Caption Box -->
+                        <div class="result-caption-wrap">
+                            <div class="caption-header">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                <span>Caption</span>
+                            </div>
+                            <p id="resultCaption" class="result-caption">Instagram Media Caption</p>
+                        </div>
                         
                         <div id="downloadOptions" class="download-options">
                             <!-- Download Action buttons rendered via JS -->

@@ -424,6 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Caption / Bio
         captionText.textContent = data.caption || data.biography || (data.full_name ? data.full_name + ' Profile' : 'No description provided');
 
+        // Toggle DP mode on media container for 1:1 aspect ratio
+        if (data.type === 'dp') {
+            mediaContainer.classList.add('is-dp-mode');
+        } else {
+            mediaContainer.classList.remove('is-dp-mode');
+        }
+
         // Helper to render active media preview item
         function renderPreviewItem(item) {
             mediaContainer.innerHTML = '';
@@ -439,20 +446,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoElem.preload = 'metadata';
                 if (thumbSrc && thumbSrc !== mediaSrc) videoElem.poster = thumbSrc;
                 videoElem.src = mediaSrc;
+
+                // Detect portrait 9:16 aspect ratio
+                videoElem.addEventListener('loadedmetadata', function() {
+                    if (this.videoHeight > this.videoWidth) {
+                        mediaContainer.classList.add('is-portrait-reel');
+                    } else {
+                        mediaContainer.classList.remove('is-portrait-reel');
+                    }
+                });
+
                 mediaContainer.appendChild(videoElem);
             } else {
                 const imgElem = document.createElement('img');
                 imgElem.className = 'media-preview-img';
                 imgElem.alt = item.title || data.full_name || (data.username ? '@' + data.username : 'Instagram Media Preview');
                 imgElem.referrerPolicy = 'no-referrer';
-                imgElem.src = thumbSrc;
+
+                // Prioritize secure proxied preview URL to guarantee bypass of Instagram CDN 403 blocks
+                const candidates = [
+                    item.preview_url,
+                    data.preview_url,
+                    item.proxy_url,
+                    item.thumbnail,
+                    data.thumbnail,
+                    item.url,
+                    item.download_url,
+                    data.download_url
+                ].filter(Boolean);
+
+                let currentAttempt = 0;
+                imgElem.src = candidates[0] || '';
+
                 imgElem.onerror = function() {
-                    if (item.preview_url && this.src !== item.preview_url) {
-                        this.src = item.preview_url;
-                    } else if (item.thumbnail && this.src !== item.thumbnail) {
-                        this.src = item.thumbnail;
-                    } else if (item.url && this.src !== item.url) {
-                        this.src = item.url;
+                    currentAttempt++;
+                    if (currentAttempt < candidates.length && candidates[currentAttempt] !== this.src) {
+                        this.src = candidates[currentAttempt];
+                    } else {
+                        // Safe fallback: Stylized SVG avatar so it NEVER shows a broken image icon
+                        const initial = (data.username || data.full_name || 'U').charAt(0).toUpperCase();
+                        this.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 100 100"><defs><linearGradient id="ig" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#833ab4"/><stop offset="50%" stop-color="#fd1d1d"/><stop offset="100%" stop-color="#fcb045"/></linearGradient></defs><rect width="100" height="100" rx="20" fill="url(#ig)"/><circle cx="50" cy="42" r="18" fill="#ffffff" opacity="0.95"/><path d="M22 84 C24 64, 76 64, 78 84" fill="#ffffff" opacity="0.95"/><text x="50" y="47" font-family="sans-serif" font-size="14" font-weight="bold" fill="#e1306c" text-anchor="middle">${initial}</text></svg>`);
+                        this.onerror = null;
                     }
                 };
                 mediaContainer.appendChild(imgElem);
@@ -463,8 +497,26 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadOptions.innerHTML = '';
         const t = (typeof i18n !== 'undefined' && i18n[currentAppLang]) ? i18n[currentAppLang] : null;
 
+        // If it's a Reel, keep only video downloads (remove unwanted JPG cover items)
+        if (data.type === 'reel' && data.media && data.media.length > 1) {
+            const videoOnly = data.media.filter(m => m.type === 'video');
+            if (videoOnly.length > 0) {
+                data.media = videoOnly;
+            }
+        }
+
+        const resultCard = document.getElementById('resultCard');
+        const reelQuickSpecs = document.getElementById('reelQuickSpecs');
+        const specRes = document.getElementById('specRes');
+
         if (data.media && data.media.length > 1) {
             // 1. Multi-Media Mode: Interactive Smart Gallery (Highlights / Stories / Carousel)
+            if (resultCard) {
+                resultCard.classList.remove('single-media-mode');
+                resultCard.classList.add('gallery-mode');
+            }
+            if (reelQuickSpecs) reelQuickSpecs.style.display = 'none';
+
             renderPreviewItem(data.media[0]);
 
             // Gallery Header & Item Counter
@@ -581,35 +633,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
             downloadOptions.appendChild(galleryScroll);
 
-        } else if (data.media && data.media.length === 1) {
-            // 2. Single Media Item Mode
-            const single = data.media[0];
-            renderPreviewItem(single);
+        } else {
+            // 2. Single Media Item Mode (Reel / Video / Single Photo)
+            if (resultCard) {
+                resultCard.classList.remove('gallery-mode');
+                resultCard.classList.add('single-media-mode');
+            }
+            if (reelQuickSpecs) {
+                reelQuickSpecs.style.display = 'flex';
+                if (specRes) {
+                    specRes.textContent = (data.type === 'video' || data.type === 'reel') ? '1080p MP4 HD' : (data.type === 'dp' ? 'Original Full Size' : 'Ultra HD JPG');
+                }
+                if (typeof window.refreshMobileAutoTickers === 'function') {
+                    window.refreshMobileAutoTickers();
+                }
+            }
+
+            const singleItem = (data.media && data.media.length === 1) ? data.media[0] : {
+                type: (data.type === 'reel' ? 'video' : 'image'),
+                url: data.download_url,
+                thumbnail: data.thumbnail,
+                preview_url: data.preview_url,
+                proxy_url: data.download_url,
+                title: data.caption
+            };
+
+            renderPreviewItem(singleItem);
 
             const btn = document.createElement('a');
-            btn.href = single.proxy_url || single.url;
+            btn.href = singleItem.proxy_url || singleItem.url || data.download_url;
             btn.className = 'btn-download-main';
             btn.setAttribute('download', '');
             btn.setAttribute('rel', 'nofollow noreferrer');
-            const iconSvg = single.type === 'video' 
+            const iconSvg = singleItem.type === 'video' 
                 ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
                 : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
-            const labelText = t ? (single.type === 'video' ? t.results.downloadVideo : t.results.downloadImage) : (data.type === 'dp' ? 'Download Profile Picture (HD)' : `Download ${single.quality || (single.type === 'video' ? 'Video (MP4)' : 'Image (JPG)')}`);
+            const labelText = t ? (singleItem.type === 'video' ? t.results.downloadVideo : t.results.downloadImage) : (data.type === 'dp' ? 'Download Profile Picture (HD)' : `Download ${singleItem.quality || (singleItem.type === 'video' ? 'Video (MP4 HD)' : 'Image (JPG HD)')}`);
             btn.innerHTML = `${iconSvg} <span>${labelText}</span>`;
             downloadOptions.appendChild(btn);
-
-        } else if (data.download_url) {
-            // 3. Fallback Single Download URL
-            renderPreviewItem({ type: (data.type === 'reel' ? 'video' : 'image'), url: data.download_url, thumbnail: data.thumbnail, title: data.caption });
-
-            const mainBtn = document.createElement('a');
-            mainBtn.href = data.download_url;
-            mainBtn.className = 'btn-download-main';
-            mainBtn.setAttribute('download', '');
-            mainBtn.setAttribute('rel', 'nofollow noreferrer');
-            const labelText = t ? t.results.downloadFile : 'Download File (HD)';
-            mainBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span>${labelText}</span>`;
-            downloadOptions.appendChild(mainBtn);
         }
 
         // Reset / Download Another Button
@@ -1626,6 +1687,10 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('instago_app_lang', lang);
             localStorage.setItem('instago_guide_lang', lang);
         } catch(e) {}
+
+        if (typeof window.refreshMobileAutoTickers === 'function') {
+            window.refreshMobileAutoTickers();
+        }
     }
 
     // Header Dropdown Event Listeners
@@ -1832,4 +1897,117 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialActive = document.querySelector('.tab-btn.active') || document.querySelector('.dock-btn.active');
     const initialType = initialActive ? initialActive.getAttribute('data-type') : 'all';
     switchActiveTab(initialType, false);
+
+    // ==========================================================================
+    // News Headline Auto-Scroller for Mobile Devices (<= 600px only)
+    // Applied to: 1. #reelQuickSpecs, 2. .footer-trust-chips
+    // ==========================================================================
+    function initMobileAutoScrollers() {
+        const isMobile = () => window.innerWidth <= 600;
+
+        function setupTicker(container) {
+            if (!container) return null;
+
+            let loopDistance = 0;
+            let isInteracting = false;
+            let resumeTimer = null;
+
+            function rebuildClones() {
+                container.querySelectorAll('.auto-ticker-clone').forEach(el => el.remove());
+
+                if (!isMobile()) {
+                    container.scrollLeft = 0;
+                    loopDistance = 0;
+                    return;
+                }
+
+                const originals = Array.from(container.children).filter(el => !el.classList.contains('auto-ticker-clone'));
+                if (originals.length === 0) return;
+
+                // Add 3 full clone sets for an infinite smooth continuous ticker runway
+                for (let set = 0; set < 3; set++) {
+                    originals.forEach(item => {
+                        const clone = item.cloneNode(true);
+                        clone.classList.add('auto-ticker-clone');
+                        clone.removeAttribute('id');
+                        clone.querySelectorAll('[id]').forEach(sub => sub.removeAttribute('id'));
+                        clone.setAttribute('aria-hidden', 'true');
+                        container.appendChild(clone);
+                    });
+                }
+
+                const firstOrig = originals[0];
+                const firstClone = container.querySelector('.auto-ticker-clone');
+                if (firstOrig && firstClone) {
+                    loopDistance = firstClone.offsetLeft - firstOrig.offsetLeft;
+                }
+            }
+
+            rebuildClones();
+
+            const speed = 0.65; // News headline ticker smooth glide speed (pixels per frame)
+
+            function step() {
+                if (isMobile()) {
+                    if (container.offsetParent !== null && container.clientWidth > 0) {
+                        if (loopDistance <= 0 || !container.querySelector('.auto-ticker-clone')) {
+                            rebuildClones();
+                        }
+
+                        if (loopDistance > 0) {
+                            if (container.scrollLeft >= loopDistance) {
+                                container.scrollLeft -= loopDistance;
+                            } else if (container.scrollLeft < 0) {
+                                container.scrollLeft += loopDistance;
+                            }
+
+                            if (!isInteracting) {
+                                container.scrollLeft += speed;
+                            }
+                        }
+                    }
+                }
+                requestAnimationFrame(step);
+            }
+
+            const onPause = () => {
+                isInteracting = true;
+                if (resumeTimer) clearTimeout(resumeTimer);
+            };
+
+            const onResume = () => {
+                if (resumeTimer) clearTimeout(resumeTimer);
+                resumeTimer = setTimeout(() => {
+                    isInteracting = false;
+                }, 1600);
+            };
+
+            container.addEventListener('touchstart', onPause, { passive: true });
+            container.addEventListener('touchend', onResume, { passive: true });
+            container.addEventListener('touchcancel', onResume, { passive: true });
+            container.addEventListener('mousedown', onPause);
+            container.addEventListener('mouseup', onResume);
+            container.addEventListener('mouseleave', onResume);
+
+            requestAnimationFrame(step);
+
+            return rebuildClones;
+        }
+
+        const refreshSpecs = setupTicker(document.getElementById('reelQuickSpecs'));
+        const refreshFooter = setupTicker(document.querySelector('.footer-trust-chips'));
+
+        window.refreshMobileAutoTickers = function() {
+            if (refreshSpecs) refreshSpecs();
+            if (refreshFooter) refreshFooter();
+        };
+
+        window.addEventListener('resize', () => {
+            if (window.refreshMobileAutoTickers) {
+                window.refreshMobileAutoTickers();
+            }
+        });
+    }
+
+    initMobileAutoScrollers();
 });

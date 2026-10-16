@@ -184,14 +184,14 @@ function normalize_rapidapi_response($data, $original_url) {
             $i_url = $d['image_url'] ?? $d['thumbnail_url'] ?? '';
             if ($v_url) {
                 $download_url = $v_url;
+                if ($i_url) $thumbnail = $i_url;
                 $media_list[] = [
                     'type' => 'video',
                     'quality' => 'HD Video (MP4)',
                     'url' => $v_url,
                     'proxy_url' => 'download.php?type=video&url=' . base64_encode($v_url)
                 ];
-            }
-            if ($i_url) {
+            } elseif ($i_url) {
                 if (empty($thumbnail)) $thumbnail = $i_url;
                 if (empty($download_url)) $download_url = $i_url;
                 $media_list[] = [
@@ -220,21 +220,15 @@ function normalize_rapidapi_response($data, $original_url) {
     elseif (!empty($data['url']) || !empty($data['video_url'])) {
         $u = $data['video_url'] ?? $data['url'] ?? '';
         $thumb = $data['thumb'] ?? $data['thumbnail'] ?? '';
+        if ($thumb) {
+            $thumbnail = $thumb;
+        }
         $media_list[] = [
             'type' => 'video',
             'quality' => 'Full HD 1080p (MP4)',
             'url' => $u,
             'proxy_url' => 'download.php?type=video&url=' . base64_encode($u)
         ];
-        if ($thumb) {
-            $thumbnail = $thumb;
-            $media_list[] = [
-                'type' => 'image',
-                'quality' => 'Cover Photo (JPG)',
-                'url' => $thumb,
-                'proxy_url' => 'download.php?type=image&url=' . base64_encode($thumb)
-            ];
-        }
         $download_url = $u;
     }
 
@@ -313,14 +307,16 @@ function fetch_instagram_dp($username) {
                         'posts_count' => $user['edge_owner_to_timeline_media']['count'] ?? 0,
                         'is_verified' => $user['is_verified'] ?? false,
                         'is_private' => $user['is_private'] ?? false,
-                        'thumbnail' => $hd_pic,
+                        'thumbnail' => $preview_url,
                         'preview_url' => $preview_url,
-                        'download_url' => $hd_pic,
+                        'download_url' => $proxy_url,
                         'media' => [
                             [
                                 'type' => 'image',
                                 'quality' => 'Full HD Profile Picture (1080p)',
                                 'url' => $hd_pic,
+                                'thumbnail' => $preview_url,
+                                'preview_url' => $preview_url,
                                 'proxy_url' => $proxy_url
                             ]
                         ]
@@ -356,14 +352,16 @@ function fetch_instagram_dp($username) {
                             'posts_count' => 0,
                             'is_verified' => $u['is_verified'] ?? false,
                             'is_private' => $u['is_private'] ?? false,
-                            'thumbnail' => $pic,
+                            'thumbnail' => $preview_url,
                             'preview_url' => $preview_url,
-                            'download_url' => $pic,
+                            'download_url' => $proxy_url,
                             'media' => [
                                 [
                                     'type' => 'image',
                                     'quality' => 'Full HD Profile Picture (1080p)',
                                     'url' => $pic,
+                                    'thumbnail' => $preview_url,
+                                    'preview_url' => $preview_url,
                                     'proxy_url' => $proxy_url
                                 ]
                             ]
@@ -387,14 +385,16 @@ function fetch_instagram_dp($username) {
                 'username' => $username,
                 'full_name' => $username,
                 'biography' => 'Instagram Profile • @' . $username,
-                'thumbnail' => $pic,
+                'thumbnail' => $preview_url,
                 'preview_url' => $preview_url,
-                'download_url' => $pic,
+                'download_url' => $proxy_url,
                 'media' => [
                     [
                         'type' => 'image',
                         'quality' => 'HD Profile Picture',
                         'url' => $pic,
+                        'thumbnail' => $preview_url,
+                        'preview_url' => $preview_url,
                         'proxy_url' => $proxy_url
                     ]
                 ]
@@ -556,34 +556,18 @@ function parse_instagram_item($item, $shortcode) {
     $media_list = [];
     $is_video = !empty($item['video_versions']);
 
-    if ($is_video) {
-        $video_url = $item['video_versions'][0]['url'] ?? '';
-        $media_list[] = [
-            'type' => 'video',
-            'quality' => 'Full HD 1080p',
-            'url' => $video_url,
-            'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($video_url)
-        ];
-    }
-
-    if (!empty($thumbnail)) {
-        $media_list[] = [
-            'type' => 'image',
-            'quality' => 'Cover Thumbnail (JPG)',
-            'url' => $thumbnail,
-            'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode($thumbnail)
-        ];
-    }
-
-    // Check carousel items
+    // Check carousel items first
     if (!empty($item['carousel_media'])) {
         foreach ($item['carousel_media'] as $idx => $c_item) {
             $num = $idx + 1;
             if (!empty($c_item['video_versions'])) {
                 $c_url = $c_item['video_versions'][0]['url'];
+                $c_thumb = $c_item['image_versions2']['candidates'][0]['url'] ?? '';
                 $media_list[] = [
                     'type' => 'video',
-                    'quality' => "Part {$num} (Video MP4)",
+                    'quality' => "Slide {$num} (Video MP4)",
+                    'title' => "Slide #{$num}",
+                    'thumbnail' => $c_thumb ?: $c_url,
                     'url' => $c_url,
                     'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
                 ];
@@ -591,11 +575,33 @@ function parse_instagram_item($item, $shortcode) {
                 $c_url = $c_item['image_versions2']['candidates'][0]['url'];
                 $media_list[] = [
                     'type' => 'image',
-                    'quality' => "Part {$num} (Photo JPG)",
+                    'quality' => "Slide {$num} (Photo JPG)",
+                    'title' => "Slide #{$num}",
+                    'thumbnail' => $c_url,
                     'url' => $c_url,
                     'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
                 ];
             }
+        }
+    } else {
+        // Single item (Reel or Photo)
+        if ($is_video) {
+            $video_url = $item['video_versions'][0]['url'] ?? '';
+            $media_list[] = [
+                'type' => 'video',
+                'quality' => 'Full HD 1080p (MP4)',
+                'thumbnail' => $thumbnail,
+                'url' => $video_url,
+                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($video_url)
+            ];
+        } else if (!empty($thumbnail)) {
+            $media_list[] = [
+                'type' => 'image',
+                'quality' => 'HD Photo (JPG)',
+                'thumbnail' => $thumbnail,
+                'url' => $thumbnail,
+                'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($thumbnail)
+            ];
         }
     }
 
@@ -619,23 +625,6 @@ function parse_graphql_media($media, $shortcode) {
     $video_url = $media['video_url'] ?? '';
 
     $media_list = [];
-    if ($is_video && !empty($video_url)) {
-        $media_list[] = [
-            'type' => 'video',
-            'quality' => 'Full HD 1080p (MP4)',
-            'url' => $video_url,
-            'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($video_url)
-        ];
-    }
-
-    if (!empty($thumbnail)) {
-        $media_list[] = [
-            'type' => 'image',
-            'quality' => 'Cover Photo (JPG)',
-            'url' => $thumbnail,
-            'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode($thumbnail)
-        ];
-    }
 
     // Edge sidecar children (carousel)
     if (!empty($media['edge_sidecar_to_children']['edges'])) {
@@ -664,6 +653,25 @@ function parse_graphql_media($media, $shortcode) {
                     'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
                 ];
             }
+        }
+    } else {
+        // Single item (Reel or Photo)
+        if ($is_video && !empty($video_url)) {
+            $media_list[] = [
+                'type' => 'video',
+                'quality' => 'Full HD 1080p (MP4)',
+                'thumbnail' => $thumbnail,
+                'url' => $video_url,
+                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($video_url)
+            ];
+        } else if (!empty($thumbnail)) {
+            $media_list[] = [
+                'type' => 'image',
+                'quality' => 'HD Photo (JPG)',
+                'thumbnail' => $thumbnail,
+                'url' => $thumbnail,
+                'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode($thumbnail)
+            ];
         }
     }
 
@@ -714,14 +722,15 @@ function fetch_instagram_story($username, $story_id = null) {
                         $media_list[] = [
                             'type' => 'video',
                             'quality' => 'Story Video HD (MP4)',
+                            'thumbnail' => $thumb_url,
                             'url' => $video_url,
                             'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id) . '&url=' . base64_encode($video_url)
                         ];
-                    }
-                    if (!empty($thumb_url)) {
+                    } else if (!empty($thumb_url)) {
                         $media_list[] = [
                             'type' => 'image',
-                            'quality' => $is_video ? 'Story Poster (JPG)' : 'Story Photo HD (JPG)',
+                            'quality' => 'Story Photo HD (JPG)',
+                            'thumbnail' => $thumb_url,
                             'url' => $thumb_url,
                             'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id . '_img') . '&url=' . base64_encode($thumb_url)
                         ];
@@ -1008,12 +1017,15 @@ if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $input_url, $m) ||
                 'following' => '450',
                 'posts_count' => '120',
                 'thumbnail' => $demo_dp,
+                'preview_url' => $demo_dp,
                 'download_url' => $demo_dp,
                 'media' => [
                     [
                         'type' => 'image',
                         'quality' => 'Full HD Profile Picture (1080p)',
                         'url' => $demo_dp,
+                        'thumbnail' => $demo_dp,
+                        'preview_url' => $demo_dp,
                         'proxy_url' => 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($demo_dp)
                     ]
                 ]
