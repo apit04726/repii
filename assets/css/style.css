@@ -1026,26 +1026,28 @@ body {
   color: var(--text-primary);
   line-height: 1.55;
   margin: 0;
-  max-height: 200px;
+  max-height: 110px;
   overflow-y: auto;
   word-break: break-word;
-  padding-right: 6px;
+  padding-right: 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(221, 42, 123, 0.4) transparent;
+  scrollbar-color: rgba(221, 42, 123, 0.45) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Smart Ultra-Sleek Scrollbar */
 .result-caption::-webkit-scrollbar {
   width: 5px;
+  display: block;
 }
 
 .result-caption::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 999px;
 }
 
 .result-caption::-webkit-scrollbar-thumb {
-  background: rgba(221, 42, 123, 0.4);
+  background: linear-gradient(180deg, #dd2a7b, #f58529);
   border-radius: 999px;
   transition: background 0.2s ease;
 }
@@ -1055,15 +1057,15 @@ body {
 }
 
 [data-theme="light"] .result-caption {
-  scrollbar-color: rgba(15, 23, 42, 0.22) transparent;
+  scrollbar-color: rgba(221, 42, 123, 0.45) rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .result-caption::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
 }
 
 [data-theme="light"] .result-caption::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.22);
-}
-
-[data-theme="light"] .result-caption::-webkit-scrollbar-thumb:hover {
-  background: var(--ig-primary);
+  background: linear-gradient(180deg, #dd2a7b, #f58529);
 }
 
 .download-options {
@@ -1194,7 +1196,7 @@ body {
   max-height: 480px;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 6px;
+  padding: 6px 8px 6px 4px;
   margin-bottom: 0.65rem;
   scrollbar-width: thin;
   scrollbar-color: rgba(221, 42, 123, 0.45) transparent;
@@ -1502,7 +1504,7 @@ body {
   .media-gallery-scroll {
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
-    padding-right: 0 !important;
+    padding: 6px 4px 6px 4px !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
   }
@@ -1515,13 +1517,20 @@ body {
     background: transparent !important;
   }
   .result-caption {
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
+    scrollbar-width: thin !important;
+    -webkit-overflow-scrolling: touch !important;
   }
   .result-caption::-webkit-scrollbar {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
+    display: block !important;
+    width: 4px !important;
+  }
+  .result-caption::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-radius: 999px !important;
+  }
+  .result-caption::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #dd2a7b, #f58529) !important;
+    border-radius: 999px !important;
   }
 }
 
@@ -2590,7 +2599,7 @@ body {
   }
 
   .result-caption {
-    max-height: 220px;
+    max-height: 105px;
   }
 
   .media-preview-container {
@@ -2800,6 +2809,10 @@ body {
     height: auto;
     max-height: 500px;
     border-radius: var(--radius-md);
+  }
+
+  .result-caption {
+    max-height: 95px;
   }
 
   .media-preview-video {
@@ -4729,7 +4742,7 @@ body {
 
   .result-caption {
     font-size: 1.05rem;
-    max-height: 380px;
+    max-height: 140px;
   }
 
   .search-input {
@@ -4873,7 +4886,7 @@ body {
 
   .result-caption {
     font-size: 1.15rem;
-    max-height: 440px;
+    max-height: 160px;
   }
 
   .step-img-wrap {
