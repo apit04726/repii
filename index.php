@@ -243,7 +243,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     <!-- Main Content -->
     <main class="container">
         <!-- Hero Section -->
-        <section class="hero-section">
+        <section class="hero-section scroll-reveal">
             <div class="badge-pill">
                 <span class="badge-dot"></span>
                 <span id="heroBadgeText">Fast & Free 1080p Instagram Downloader</span>
@@ -277,6 +277,10 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                     <button type="button" class="tab-btn" data-type="stories">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                         <span id="tabLabelStories">Stories</span>
+                    </button>
+                    <button type="button" class="tab-btn" data-type="highlights">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="12 8 13.5 11 17 11.5 14.5 14 15 17.5 12 16 9 17.5 9.5 14 7 11.5 10.5 11 12 8"/></svg>
+                        <span id="tabLabelHighlights">Highlights</span>
                     </button>
                     <button type="button" class="tab-btn" data-type="photos">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -395,7 +399,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         </div>
 
         <!-- Interactive Smart How-to-Download Guide Section -->
-        <section class="section-steps" id="guideSection">
+        <section class="section-steps scroll-reveal" id="guideSection">
             <div class="section-heading">
                 <div class="guide-badge-pill">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
@@ -497,7 +501,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         </section>
 
         <!-- Ways to Download Instagram Reels Video by Device (Matching indown.io) -->
-        <section class="section-device-guide" id="deviceGuide">
+        <section class="section-device-guide scroll-reveal" id="deviceGuide">
             <div class="section-heading">
                 <h2 class="section-title" id="waysHeading">Ways to Download <span class="gradient-text">Instagram Reels Video</span></h2>
                 <p class="section-subtitle" id="waysSubheading">Step-by-step instructions tailored for your smartphone or desktop</p>
@@ -522,7 +526,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
             <!-- Device Panels -->
             <div class="device-panel active" id="panel-ios">
                 <div class="device-guide-card">
-                    <div class="device-badge">iOS Safari Flow</div>
+                    <div class="device-badge" id="iosBadge">iOS Safari Flow</div>
                     <h3 id="iosGuideTitle">How to Download Instagram Reels on iPhone (iOS)</h3>
                     <ol class="device-step-list">
                         <li id="iosStep1">Open the <strong>Instagram app</strong> on your iPhone or iPad and navigate to your desired Reel video.</li>
@@ -536,7 +540,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
             <div class="device-panel" id="panel-android">
                 <div class="device-guide-card">
-                    <div class="device-badge">Android Chrome Flow</div>
+                    <div class="device-badge" id="androidBadge">Android Chrome Flow</div>
                     <h3 id="androidGuideTitle">How to Download Instagram Reels on Android</h3>
                     <ol class="device-step-list">
                         <li id="androidStep1">Launch Instagram on your Android device (Samsung, OnePlus, Xiaomi, Pixel, etc.).</li>
@@ -550,7 +554,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
             <div class="device-panel" id="panel-pc">
                 <div class="device-guide-card">
-                    <div class="device-badge">Desktop PC & Mac Flow</div>
+                    <div class="device-badge" id="pcBadge">Desktop PC & Mac Flow</div>
                     <h3 id="pcGuideTitle">How to Download Instagram Reels on PC & Mac</h3>
                     <ol class="device-step-list">
                         <li id="pcStep1">Open <strong>instagram.com</strong> in your Chrome, Edge, Safari, or Firefox browser on your desktop or laptop.</li>
@@ -580,7 +584,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         </div>
 
         <!-- In-Depth Real SEO Content Article (Matching indown.io/reels) -->
-        <section class="section-seo-article">
+        <section class="section-seo-article scroll-reveal">
             <div class="article-grid">
                 <div class="article-card">
                     <div class="article-icon">✨</div>
@@ -607,7 +611,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         </section>
 
         <!-- Features Showcase (6 Rich Cards) -->
-        <section class="section-features">
+        <section class="section-features scroll-reveal">
             <div class="section-heading">
                 <h2 class="section-title" id="featHeading">Why Choose <span class="gradient-text">InstaGo</span>?</h2>
                 <p class="section-subtitle" id="featSubheading">Engineered for speed, privacy, and maximum video quality</p>
@@ -681,90 +685,94 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         </section>
 
         <!-- Frequently Asked Questions (8 Comprehensive Questions like indown.io) -->
-        <section class="section-faq">
+        <section class="section-faq scroll-reveal">
             <div class="section-heading">
                 <h2 class="section-title" id="faqHeading">Frequently Asked <span class="gradient-text">Questions</span></h2>
                 <p class="section-subtitle" id="faqSubheading">Got questions? We've got answers</p>
             </div>
 
             <div class="faq-list">
-                <div class="faq-item open">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ1">Is InstaGo free to use?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA1">Yes, InstaGo is 100% free with unlimited downloads. You do not need to purchase any subscription or install any third-party app.</p>
+                <div class="faq-col">
+                    <div class="faq-item faq-order-1 open">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ1">Is InstaGo free to use?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA1">Yes, InstaGo is 100% free with unlimited downloads. You do not need to purchase any subscription or install any third-party app.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item faq-order-3">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ3">Can I download full-size HD Profile Pictures (DP)?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA3">Yes! Simply type the username (e.g. <code>@cristiano</code>) or paste the profile link into InstaGo. We fetch the uncompressed original HD profile picture for you to view or download.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item faq-order-5">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ5">Where are downloaded videos saved on my phone?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA5">On Android, files are saved in your device's <strong>Downloads</strong> folder or Gallery app. On iOS, they appear in the Safari Downloads list and can be saved to the Photos app with one tap.</p>
+                        </div>
+                    </div>
+
+                    <div class="faq-item faq-order-7">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ7">Can we download Reels video in original Full HD 1080p?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA7">Yes, InstaGo always serves the highest resolution stream available from Instagram's CDN nodes, which is typically 1080p Full HD MP4 with crystal-clear audio.</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ2">How can I download Instagram Reels on my iPhone?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA2">Open Safari on your iPhone, paste the copied Reel URL into InstaGo, and click "Download MP4". Safari will prompt you with a download dialog, and the video will be saved directly into your Files or Photos app.</p>
+                <div class="faq-col">
+                    <div class="faq-item faq-order-2">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ2">How can I download Instagram Reels on my iPhone?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA2">Open Safari on your iPhone, paste the copied Reel URL into InstaGo, and click "Download MP4". Safari will prompt you with a download dialog, and the video will be saved directly into your Files or Photos app.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ3">Can I download full-size HD Profile Pictures (DP)?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA3">Yes! Simply type the username (e.g. <code>@cristiano</code>) or paste the profile link into InstaGo. We fetch the uncompressed original HD profile picture for you to view or download.</p>
+                    <div class="faq-item faq-order-4">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ4">Do the downloaded videos contain any watermark?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA4">No, all videos and photos are downloaded in their raw, native quality without adding any logos, stamps, or watermarks.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ4">Do the downloaded videos contain any watermark?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA4">No, all videos and photos are downloaded in their raw, native quality without adding any logos, stamps, or watermarks.</p>
+                    <div class="faq-item faq-order-6">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ6">How many Reels videos can I download per day?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA6">There is absolutely no limit! You can download as many Instagram Reels videos, Stories, and photos as you want. InstaGo is 100% free and accessible 24x7.</p>
+                        </div>
                     </div>
-                </div>
 
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ5">Where are downloaded videos saved on my phone?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA5">On Android, files are saved in your device's <strong>Downloads</strong> folder or Gallery app. On iOS, they appear in the Safari Downloads list and can be saved to the Photos app with one tap.</p>
-                    </div>
-                </div>
-
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ6">How many Reels videos can I download per day?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA6">There is absolutely no limit! You can download as many Instagram Reels videos, Stories, and photos as you want. InstaGo is 100% free and accessible 24x7.</p>
-                    </div>
-                </div>
-
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ7">Can we download Reels video in original Full HD 1080p?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA7">Yes, InstaGo always serves the highest resolution stream available from Instagram's CDN nodes, which is typically 1080p Full HD MP4 with crystal-clear audio.</p>
-                    </div>
-                </div>
-
-                <div class="faq-item">
-                    <button type="button" class="faq-question">
-                        <span id="faqQ8">Is it legal to download Instagram Reels video?</span>
-                        <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </button>
-                    <div class="faq-answer">
-                        <p id="faqA8">Downloading Instagram Reels for personal offline viewing, educational purposes, or status updates is permissible. If you intend to use content commercially, you must seek permission from the original copyright holder.</p>
+                    <div class="faq-item faq-order-8">
+                        <button type="button" class="faq-question">
+                            <span id="faqQ8">Is it legal to download Instagram Reels video?</span>
+                            <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="faq-answer">
+                            <p id="faqA8">Downloading Instagram Reels for personal offline viewing, educational purposes, or status updates is permissible. If you intend to use content commercially, you must seek permission from the original copyright holder.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -789,7 +797,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     </main>
 
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer scroll-reveal">
         <div class="container">
             <div class="footer-grid">
                 <!-- Brand & Disclaimer Column -->
@@ -805,7 +813,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                         <span class="footer-brand-name">InstaGo</span>
                     </a>
 
-                    <p class="footer-tagline">
+                    <p class="footer-tagline" id="footerTagline">
                         The fastest, 100% anonymous &amp; watermark-free Instagram media downloader. Save HD Reels, Stories, DP, and Photos in 1080p.
                     </p>
 
@@ -814,41 +822,42 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                     </div>
 
                     <div class="footer-trust-chips">
-                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> 100% Free Forever</span>
-                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> No Login Required</span>
-                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Zero Watermark</span>
+                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span id="trustChip1">100% Free Forever</span></span>
+                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span id="trustChip2">No Login Required</span></span>
+                        <span class="trust-chip"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> <span id="trustChip3">Zero Watermark</span></span>
                     </div>
                 </div>
 
                 <!-- Navigation Columns -->
                 <div class="footer-nav-columns">
                     <div class="footer-nav-col">
-                        <h4 class="footer-col-title">Instagram Tools</h4>
+                        <h4 class="footer-col-title" id="footColTools">Instagram Tools</h4>
                         <ul class="footer-links">
-                            <li><a href="#searchForm" id="footLinkReels">Reels Downloader</a></li>
-                            <li><a href="#searchForm" id="footLinkDP">DP Downloader</a></li>
-                            <li><a href="#searchForm" id="footLinkStories">Story Downloader</a></li>
-                            <li><a href="#searchForm" id="footLinkPhotos">Photo Downloader</a></li>
+                            <li><a href="#searchForm" class="foot-tool-link" data-type="reels" id="footLinkReels">Reels Downloader</a></li>
+                            <li><a href="#searchForm" class="foot-tool-link" data-type="dp" id="footLinkDP">DP Downloader</a></li>
+                            <li><a href="#searchForm" class="foot-tool-link" data-type="stories" id="footLinkStories">Story Downloader</a></li>
+                            <li><a href="#searchForm" class="foot-tool-link" data-type="highlights" id="footLinkHighlights">Highlights Downloader</a></li>
+                            <li><a href="#searchForm" class="foot-tool-link" data-type="photos" id="footLinkPhotos">Photo Downloader</a></li>
                         </ul>
                     </div>
 
                     <div class="footer-nav-col">
-                        <h4 class="footer-col-title">Device Guides</h4>
+                        <h4 class="footer-col-title" id="footColGuides">Device Guides</h4>
                         <ul class="footer-links">
-                            <li><a href="#deviceGuide">iPhone &amp; iPad</a></li>
-                            <li><a href="#deviceGuide">Android</a></li>
-                            <li><a href="#deviceGuide">Windows PC</a></li>
-                            <li><a href="#deviceGuide">Mac OS</a></li>
+                            <li><a href="#deviceGuide" id="footDevIos">iPhone &amp; iPad</a></li>
+                            <li><a href="#deviceGuide" id="footDevAndroid">Android</a></li>
+                            <li><a href="#deviceGuide" id="footDevPC">Windows PC</a></li>
+                            <li><a href="#deviceGuide" id="footDevMac">Mac OS</a></li>
                         </ul>
                     </div>
 
                     <div class="footer-nav-col">
-                        <h4 class="footer-col-title">Legal &amp; Policy</h4>
+                        <h4 class="footer-col-title" id="footColLegal">Legal &amp; Policy</h4>
                         <ul class="footer-links">
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="privacy">Privacy Policy</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="terms">Terms of Service</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="about">About Us</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="contact">Contact &amp; DMCA</a></li>
+                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="privacy" id="footLegPrivacy">Privacy Policy</a></li>
+                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="terms" id="footLegTerms">Terms of Service</a></li>
+                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="about" id="footLegAbout">About Us</a></li>
+                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="contact" id="footLegContact">Contact &amp; DMCA</a></li>
                         </ul>
                     </div>
                 </div>
@@ -858,7 +867,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
             <div class="footer-share-bar">
                 <div class="share-bar-label">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-                    <span>Share InstaGo with Friends:</span>
+                    <span id="shareBarLabel">Share InstaGo with Friends:</span>
                 </div>
                 <div class="share-chips">
                     <a href="https://api.whatsapp.com/send?text=Download%20Instagram%20Reels%20in%20Full%20HD%20free%20at%20<?= urlencode(SITE_URL) ?>" target="_blank" rel="noopener" class="share-btn whatsapp" title="Share on WhatsApp" aria-label="Share on WhatsApp">
@@ -888,10 +897,10 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         <div class="legal-modal-box">
             <div class="legal-modal-header">
                 <div class="modal-tab-pills">
-                    <button type="button" class="modal-tab-btn active" data-tab="privacy">Privacy Policy</button>
-                    <button type="button" class="modal-tab-btn" data-tab="terms">Terms of Service</button>
-                    <button type="button" class="modal-tab-btn" data-tab="about">About Us</button>
-                    <button type="button" class="modal-tab-btn" data-tab="contact">Contact Us</button>
+                    <button type="button" class="modal-tab-btn active" data-tab="privacy" id="modalTabPrivacy">Privacy Policy</button>
+                    <button type="button" class="modal-tab-btn" data-tab="terms" id="modalTabTerms">Terms of Service</button>
+                    <button type="button" class="modal-tab-btn" data-tab="about" id="modalTabAbout">About Us</button>
+                    <button type="button" class="modal-tab-btn" data-tab="contact" id="modalTabContact">Contact Us</button>
                 </div>
                 <button type="button" class="modal-close-btn" id="legalModalClose" aria-label="Close Modal">&times;</button>
             </div>
@@ -979,6 +988,10 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
         <button type="button" class="dock-btn" data-type="stories" aria-label="Stories">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             <span id="dockLabelStories">Stories</span>
+        </button>
+        <button type="button" class="dock-btn" data-type="highlights" aria-label="Highlights">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polygon points="12 8 13.5 11 17 11.5 14.5 14 15 17.5 12 16 9 17.5 9.5 14 7 11.5 10.5 11 12 8"/></svg>
+            <span id="dockLabelHighlights">Highlights</span>
         </button>
         <button type="button" class="dock-btn" data-type="photos" aria-label="Photos">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>

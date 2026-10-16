@@ -644,9 +644,12 @@ function parse_graphql_media($media, $shortcode) {
             $num = $idx + 1;
             if (!empty($node['is_video']) && !empty($node['video_url'])) {
                 $c_url = $node['video_url'];
+                $thumb = $node['display_url'] ?? '';
                 $media_list[] = [
                     'type' => 'video',
                     'quality' => "Slide {$num} (Video MP4)",
+                    'title' => "Slide #{$num}",
+                    'thumbnail' => $thumb ?: $c_url,
                     'url' => $c_url,
                     'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
                 ];
@@ -655,6 +658,8 @@ function parse_graphql_media($media, $shortcode) {
                 $media_list[] = [
                     'type' => 'image',
                     'quality' => "Slide {$num} (Photo JPG)",
+                    'title' => "Slide #{$num}",
+                    'thumbnail' => $c_url,
                     'url' => $c_url,
                     'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
                 ];
@@ -796,25 +801,32 @@ function fetch_instagram_story($username, $story_id = null) {
 
 // Helper to parse multiple story items from reels_media
 function parse_story_items($items, $username) {
+    $is_highlight = (strtolower($username) === 'highlight' || strtolower($username) === 'highlights');
     $media_list = [];
     foreach ($items as $idx => $s_item) {
         $num = $idx + 1;
         $s_id = $s_item['pk'] ?? $s_item['id'] ?? $num;
+        $label_prefix = $is_highlight ? 'Highlight' : 'Story';
+        $thumb_candidate = $s_item['image_versions2']['candidates'][0]['url'] ?? '';
         if (!empty($s_item['video_versions'])) {
             $v_url = $s_item['video_versions'][0]['url'];
             $media_list[] = [
                 'type' => 'video',
-                'quality' => "Story {$num} (Video MP4)",
+                'quality' => "{$label_prefix} {$num} (Video MP4)",
+                'title' => "{$label_prefix} #{$num}",
+                'thumbnail' => $thumb_candidate ?: $v_url,
                 'url' => $v_url,
-                'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_Story_{$username}_{$s_id}") . '&url=' . base64_encode($v_url)
+                'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$label_prefix}_{$username}_{$s_id}") . '&url=' . base64_encode($v_url)
             ];
-        } else if (!empty($s_item['image_versions2']['candidates'])) {
-            $i_url = $s_item['image_versions2']['candidates'][0]['url'];
+        } else if (!empty($thumb_candidate) || !empty($s_item['image_versions2']['candidates'])) {
+            $i_url = $thumb_candidate ?: $s_item['image_versions2']['candidates'][0]['url'];
             $media_list[] = [
                 'type' => 'image',
-                'quality' => "Story {$num} (Photo JPG)",
+                'quality' => "{$label_prefix} {$num} (Photo JPG)",
+                'title' => "{$label_prefix} #{$num}",
+                'thumbnail' => $i_url,
                 'url' => $i_url,
-                'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_Story_{$username}_{$s_id}") . '&url=' . base64_encode($i_url)
+                'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_{$label_prefix}_{$username}_{$s_id}") . '&url=' . base64_encode($i_url)
             ];
         }
     }
@@ -823,10 +835,13 @@ function parse_story_items($items, $username) {
         $first = $media_list[0];
         $author = $items[0]['user']['username'] ?? $username;
         $full_name = $items[0]['user']['full_name'] ?? '';
+        $desc = $is_highlight 
+            ? count($media_list) . ' Highlights found for @' . $author
+            : count($media_list) . ' Active Stories found for @' . $author;
         return [
-            'type' => 'story',
+            'type' => $is_highlight ? 'highlight' : 'story',
             'author' => '@' . $author . ($full_name ? " ({$full_name})" : ''),
-            'caption' => count($media_list) . ' Active Stories found for @' . $author,
+            'caption' => $desc,
             'thumbnail' => $first['url'],
             'download_url' => $first['url'],
             'media' => $media_list
@@ -853,7 +868,7 @@ if (empty($input_url)) {
 }
 
 // Auto-detect input type
-// 1. Stories: instagram.com/stories/username/12345 or /stories/highlights/12345
+// 1. Stories & Highlights: instagram.com/stories/username/12345 or /stories/highlights/12345
 if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-]+)(?:\/([0-9]+))?)/i', $input_url, $m)) {
     if (!empty($m[1])) {
         $username = 'highlights';
@@ -864,7 +879,44 @@ if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-
     }
     $res = fetch_instagram_story($username, $story_id);
     if ($res) json_success($res);
-    json_fail('Story not found or the account is private.');
+
+    $rapid = fetch_via_rapidapi($input_url);
+    if ($rapid) json_success($rapid);
+
+    json_fail('Story or Highlight not found or the account is private.');
+}
+
+// 1b. Shared Highlight Shortlink: instagram.com/s/aGlnaGxpZ2h0OjE4...
+if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
+    $highlight_id = null;
+    $b64 = strtr($m[1], '-_', '+/');
+    $decoded = base64_decode($b64);
+    if ($decoded && preg_match('/highlight:([0-9]+)/i', $decoded, $dm)) {
+        $highlight_id = $dm[1];
+    }
+    if (!$highlight_id) {
+        $ch = curl_init($input_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, true);
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        $head = curl_exec($ch);
+        $redirect_url = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+        curl_close($ch);
+        if ($redirect_url && preg_match('/highlights\/([0-9]+)/i', $redirect_url, $rm)) {
+            $highlight_id = $rm[1];
+        }
+    }
+    if ($highlight_id) {
+        $res = fetch_instagram_story('highlights', $highlight_id);
+        if ($res) json_success($res);
+    }
+    $rapid = fetch_via_rapidapi($input_url);
+    if ($rapid) json_success($rapid);
+
+    json_fail('Highlight not found or the account is private.');
 }
 
 // 2. Reels: instagram.com/reel/SHORTCODE or /reels/SHORTCODE

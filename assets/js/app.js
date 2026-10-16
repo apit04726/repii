@@ -67,33 +67,95 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 2. Tab & Mobile Dock Navigation
+    let lastTabSwitchTime = 0;
+
+    function scrollTabIntoCenter(btn) {
+        if (!btn) return;
+        const container = btn.closest('.tabs-container');
+        if (!container) return;
+        if (container.scrollWidth > container.clientWidth) {
+            const btnLeft = btn.offsetLeft;
+            const btnWidth = btn.offsetWidth;
+            const containerWidth = container.clientWidth;
+            const targetLeft = btnLeft - (containerWidth / 2) + (btnWidth / 2);
+            container.scrollTo({
+                left: Math.max(0, targetLeft),
+                behavior: 'smooth'
+            });
+        }
+    }
+
     function switchActiveTab(type, shouldScroll = false) {
+        if (!type) type = 'all';
+
         tabBtns.forEach(btn => {
-            btn.classList.toggle('active', btn.getAttribute('data-type') === type);
+            const isActive = btn.getAttribute('data-type') === type;
+            btn.classList.toggle('active', isActive);
+            if (isActive) {
+                scrollTabIntoCenter(btn);
+            }
         });
+
         dockBtns.forEach(btn => {
             btn.classList.toggle('active', btn.getAttribute('data-type') === type);
         });
+
         updatePlaceholder(type);
 
         if (shouldScroll) {
-            if (navigator.vibrate) navigator.vibrate(10);
+            if (navigator.vibrate) {
+                try { navigator.vibrate(10); } catch(e) {}
+            }
             searchForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
             setTimeout(() => urlInput.focus(), 300);
         }
     }
 
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            switchActiveTab(btn.getAttribute('data-type'), false);
-        });
-    });
+    function bindTabActivation(elements, isDock = false) {
+        elements.forEach(btn => {
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchMoved = false;
 
-    dockBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            switchActiveTab(btn.getAttribute('data-type'), true);
+            btn.addEventListener('touchstart', (e) => {
+                if (e.touches && e.touches.length === 1) {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                    touchMoved = false;
+                }
+            }, { passive: true });
+
+            btn.addEventListener('touchmove', (e) => {
+                if (e.touches && e.touches.length === 1) {
+                    const diffX = Math.abs(e.touches[0].clientX - touchStartX);
+                    const diffY = Math.abs(e.touches[0].clientY - touchStartY);
+                    if (diffX > 10 || diffY > 10) {
+                        touchMoved = true;
+                    }
+                }
+            }, { passive: true });
+
+            btn.addEventListener('touchend', (e) => {
+                if (!touchMoved) {
+                    const now = Date.now();
+                    lastTabSwitchTime = now;
+                    const type = btn.getAttribute('data-type') || 'all';
+                    switchActiveTab(type, isDock);
+                }
+            });
+
+            btn.addEventListener('click', (e) => {
+                const now = Date.now();
+                if (now - lastTabSwitchTime < 350) return; // Prevent double trigger on touch devices
+                lastTabSwitchTime = now;
+                const type = btn.getAttribute('data-type') || 'all';
+                switchActiveTab(type, isDock);
+            });
         });
-    });
+    }
+
+    bindTabActivation(tabBtns, false);
+    bindTabActivation(dockBtns, true);
 
     function updatePlaceholder(type) {
         const langObj = (typeof i18n !== 'undefined' && i18n[currentAppLang]) ? i18n[currentAppLang] : null;
@@ -111,6 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'stories':
                 urlInput.placeholder = 'Paste Instagram Story link or Username...';
+                break;
+            case 'highlights':
+                urlInput.placeholder = 'Paste Instagram Highlight link (e.g. https://www.instagram.com/stories/highlights/...)';
                 break;
             case 'photos':
                 urlInput.placeholder = 'Paste Instagram Post / Carousel photo link...';
@@ -151,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function isValidInstagramTarget(val) {
         if (!val) return false;
-        return /(?:instagram\.com|instagr\.am)\/(?:p|reel|reels|stories|tv|highlights)\/[A-Za-z0-9_.-]+/i.test(val) ||
+        return /(?:instagram\.com|instagr\.am)\/(?:p|reel|reels|stories|tv|highlights|s)\/[A-Za-z0-9_.-]+/i.test(val) ||
                /(?:instagram\.com|instagr\.am)\/[A-Za-z0-9_.-]{3,30}\/?$/i.test(val) ||
                /^@[A-Za-z0-9._]{2,30}$/.test(val);
     }
@@ -217,6 +282,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i.test(val)) {
             detected = t ? t.detection.reel : 'Instagram Reel Detected';
             tabKey = 'reels';
+        } else if (/instagram\.com\/(?:stories\/highlights\/[0-9]+|s\/[A-Za-z0-9_-]+)/i.test(val)) {
+            detected = t ? (t.detection.highlight || 'Instagram Highlight Detected') : 'Instagram Highlight Detected';
+            tabKey = 'highlights';
         } else if (/instagram\.com\/stories\/([A-Za-z0-9._-]+)/i.test(val)) {
             detected = t ? t.detection.story : 'Instagram Story Detected';
             tabKey = 'stories';
@@ -231,13 +299,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (detected) {
             detectedTypeSpan.textContent = detected;
             detectionIndicator.classList.add('active');
-            // Sync active tab in both desktop bar and mobile dock
-            tabBtns.forEach(btn => {
-                btn.classList.toggle('active', btn.getAttribute('data-type') === tabKey);
-            });
-            dockBtns.forEach(btn => {
-                btn.classList.toggle('active', btn.getAttribute('data-type') === tabKey);
-            });
+            // Sync active tab in both desktop bar and mobile dock with auto-scroll
+            switchActiveTab(tabKey, false);
         } else {
             detectionIndicator.classList.remove('active');
         }
@@ -361,59 +424,184 @@ document.addEventListener('DOMContentLoaded', () => {
         // Caption / Bio
         captionText.textContent = data.caption || data.biography || (data.full_name ? data.full_name + ' Profile' : 'No description provided');
 
-        // Media Preview
-        mediaContainer.innerHTML = '';
-        if (data.type === 'reel' || (data.media && data.media[0] && data.media[0].type === 'video')) {
-            const videoUrl = data.download_url || (data.media && data.media[0].url);
-            const videoElem = document.createElement('video');
-            videoElem.className = 'media-preview-video';
-            videoElem.controls = true;
-            videoElem.playsInline = true;
-            videoElem.preload = 'metadata';
-            if (data.thumbnail) videoElem.poster = data.thumbnail;
-            videoElem.src = videoUrl;
-            mediaContainer.appendChild(videoElem);
-        } else {
-            const imgElem = document.createElement('img');
-            imgElem.className = 'media-preview-img';
-            imgElem.alt = data.full_name || (data.username ? '@' + data.username : 'Instagram Media Preview');
-            imgElem.referrerPolicy = 'no-referrer';
-            const initialSrc = data.preview_url || data.thumbnail || data.download_url;
-            imgElem.src = initialSrc;
-            imgElem.onerror = function() {
-                if (data.preview_url && this.src !== data.preview_url) {
-                    this.src = data.preview_url;
-                } else if (data.thumbnail && this.src !== data.thumbnail) {
-                    this.src = data.thumbnail;
-                } else if (data.download_url && this.src !== data.download_url) {
-                    this.src = data.download_url;
-                }
-            };
-            mediaContainer.appendChild(imgElem);
+        // Helper to render active media preview item
+        function renderPreviewItem(item) {
+            mediaContainer.innerHTML = '';
+            const isVideo = item.type === 'video';
+            const mediaSrc = item.url || item.download_url;
+            const thumbSrc = item.thumbnail || item.preview_url || mediaSrc;
+
+            if (isVideo) {
+                const videoElem = document.createElement('video');
+                videoElem.className = 'media-preview-video';
+                videoElem.controls = true;
+                videoElem.playsInline = true;
+                videoElem.preload = 'metadata';
+                if (thumbSrc && thumbSrc !== mediaSrc) videoElem.poster = thumbSrc;
+                videoElem.src = mediaSrc;
+                mediaContainer.appendChild(videoElem);
+            } else {
+                const imgElem = document.createElement('img');
+                imgElem.className = 'media-preview-img';
+                imgElem.alt = item.title || data.full_name || (data.username ? '@' + data.username : 'Instagram Media Preview');
+                imgElem.referrerPolicy = 'no-referrer';
+                imgElem.src = thumbSrc;
+                imgElem.onerror = function() {
+                    if (item.preview_url && this.src !== item.preview_url) {
+                        this.src = item.preview_url;
+                    } else if (item.thumbnail && this.src !== item.thumbnail) {
+                        this.src = item.thumbnail;
+                    } else if (item.url && this.src !== item.url) {
+                        this.src = item.url;
+                    }
+                };
+                mediaContainer.appendChild(imgElem);
+            }
         }
 
-        // Download Action Buttons
+        // Download Action Buttons & Multi-Media Smart Gallery
         downloadOptions.innerHTML = '';
-
         const t = (typeof i18n !== 'undefined' && i18n[currentAppLang]) ? i18n[currentAppLang] : null;
 
-        if (data.media && data.media.length > 0) {
+        if (data.media && data.media.length > 1) {
+            // 1. Multi-Media Mode: Interactive Smart Gallery (Highlights / Stories / Carousel)
+            renderPreviewItem(data.media[0]);
+
+            // Gallery Header & Item Counter
+            const galleryHeader = document.createElement('div');
+            galleryHeader.className = 'media-gallery-header';
+
+            const countChip = document.createElement('span');
+            countChip.className = 'gallery-count-chip';
+            const itemTypeLabel = data.type === 'highlight' ? 'Highlights' : (data.type === 'story' ? 'Stories' : 'Items');
+            countChip.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> ${data.media.length} ${itemTypeLabel}`;
+            galleryHeader.appendChild(countChip);
+
+            const hintText = document.createElement('span');
+            hintText.className = 'gallery-hint-text';
+            hintText.textContent = t ? (t.langCode === 'GU' ? 'પ્રિવ્યુ માટે કાર્ડ દબાવો • ડાઉનલોડ બટનથી સેવ કરો' : (t.langCode === 'HI' ? 'प्रीव्यू के लिए कार्ड दबाएं • डाउनलोड करें' : 'Tap item to preview • Click to download')) : 'Tap item to preview • Click to download';
+            galleryHeader.appendChild(hintText);
+
+            downloadOptions.appendChild(galleryHeader);
+
+            // Smart Scrollable Container
+            const galleryScroll = document.createElement('div');
+            galleryScroll.className = 'media-gallery-scroll';
+
             data.media.forEach((m, index) => {
-                const btn = document.createElement('a');
-                btn.href = m.proxy_url || m.url;
-                btn.className = (index === 0) ? 'btn-download-main' : 'btn-download-sub';
-                btn.setAttribute('download', '');
-                btn.setAttribute('rel', 'nofollow noreferrer');
+                const card = document.createElement('div');
+                card.className = `media-item-card ${index === 0 ? 'active-item' : ''}`;
+                card.setAttribute('data-index', index);
+
+                // Thumbnail with Play / Photo Overlay
+                const thumbBox = document.createElement('div');
+                thumbBox.className = 'media-item-thumb-box';
+
+                const thumbImg = document.createElement('img');
+                thumbImg.className = 'media-item-thumb-img';
+                thumbImg.src = m.thumbnail || m.url;
+                thumbImg.alt = m.title || `Item ${index + 1}`;
+                thumbImg.referrerPolicy = 'no-referrer';
+                thumbImg.onerror = function() {
+                    if (m.url && this.src !== m.url) {
+                        this.src = m.url;
+                    }
+                };
+                thumbBox.appendChild(thumbImg);
+
+                const indexTag = document.createElement('span');
+                indexTag.className = 'media-item-index-tag';
+                indexTag.textContent = `#${index + 1}`;
+                thumbBox.appendChild(indexTag);
+
+                if (m.type === 'video') {
+                    const playOverlay = document.createElement('div');
+                    playOverlay.className = 'media-item-play-icon';
+                    playOverlay.innerHTML = `<svg viewBox="0 0 24 24"><polygon points="8 5 19 12 8 19 8 5"/></svg>`;
+                    thumbBox.appendChild(playOverlay);
+                }
+
+                // Metadata Details
+                const info = document.createElement('div');
+                info.className = 'media-item-info';
+
+                const titleRow = document.createElement('div');
+                titleRow.className = 'media-item-title-row';
+                const title = document.createElement('span');
+                title.className = 'media-item-title';
+                const defaultTitle = data.type === 'highlight' ? `Highlight #${index + 1}` : (data.type === 'story' ? `Story #${index + 1}` : `Slide #${index + 1}`);
+                title.textContent = m.title || defaultTitle;
+                titleRow.appendChild(title);
+
+                const quality = document.createElement('span');
+                quality.className = 'media-item-quality-badge';
+                const qualityText = m.type === 'video' ? '1080p • MP4' : 'HD • JPG';
+                quality.innerHTML = m.type === 'video' 
+                    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> <span>${qualityText}</span>`
+                    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/></svg> <span>${qualityText}</span>`;
+
+                const nowPlaying = document.createElement('span');
+                nowPlaying.className = 'media-item-now-playing';
+                nowPlaying.innerHTML = `<svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> ${t ? (t.langCode === 'GU' ? 'હાલમાં ચાલુ છે' : (t.langCode === 'HI' ? 'चल रहा है' : 'Playing')) : 'Playing'}`;
+
+                info.appendChild(titleRow);
+                info.appendChild(quality);
+                info.appendChild(nowPlaying);
+
+                // Direct Download Action Button
+                const dlBtn = document.createElement('a');
+                dlBtn.href = m.proxy_url || m.url;
+                dlBtn.className = 'media-item-dl-btn';
+                dlBtn.setAttribute('download', '');
+                dlBtn.setAttribute('rel', 'nofollow noreferrer');
+                const dlBtnFull = m.type === 'video' ? 'Download MP4' : 'Download JPG';
+                const dlBtnMid = 'Download';
+                const dlBtnShort = m.type === 'video' ? 'MP4' : 'JPG';
+                dlBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="dl-lbl-full">${dlBtnFull}</span><span class="dl-lbl-mid">${dlBtnMid}</span><span class="dl-lbl-short">${dlBtnShort}</span>`;
                 
-                const iconSvg = m.type === 'video' 
-                    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
-                    : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
-                
-                const labelText = t ? (m.type === 'video' ? t.results.downloadVideo : t.results.downloadImage) : (data.type === 'dp' ? 'Download Profile Picture (HD)' : `Download ${m.quality || (m.type === 'video' ? 'Video (MP4)' : 'Image (JPG)')}`);
-                btn.innerHTML = `${iconSvg} <span>${labelText}</span>`;
-                downloadOptions.appendChild(btn);
+                dlBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+
+                // Tap card to switch active preview
+                card.addEventListener('click', () => {
+                    renderPreviewItem(m);
+                    galleryScroll.querySelectorAll('.media-item-card').forEach(c => c.classList.remove('active-item'));
+                    card.classList.add('active-item');
+                    if (window.innerWidth <= 820) {
+                        mediaContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+
+                card.appendChild(thumbBox);
+                card.appendChild(info);
+                card.appendChild(dlBtn);
+                galleryScroll.appendChild(card);
             });
+
+            downloadOptions.appendChild(galleryScroll);
+
+        } else if (data.media && data.media.length === 1) {
+            // 2. Single Media Item Mode
+            const single = data.media[0];
+            renderPreviewItem(single);
+
+            const btn = document.createElement('a');
+            btn.href = single.proxy_url || single.url;
+            btn.className = 'btn-download-main';
+            btn.setAttribute('download', '');
+            btn.setAttribute('rel', 'nofollow noreferrer');
+            const iconSvg = single.type === 'video' 
+                ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
+                : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+            const labelText = t ? (single.type === 'video' ? t.results.downloadVideo : t.results.downloadImage) : (data.type === 'dp' ? 'Download Profile Picture (HD)' : `Download ${single.quality || (single.type === 'video' ? 'Video (MP4)' : 'Image (JPG)')}`);
+            btn.innerHTML = `${iconSvg} <span>${labelText}</span>`;
+            downloadOptions.appendChild(btn);
+
         } else if (data.download_url) {
+            // 3. Fallback Single Download URL
+            renderPreviewItem({ type: (data.type === 'reel' ? 'video' : 'image'), url: data.download_url, thumbnail: data.thumbnail, title: data.caption });
+
             const mainBtn = document.createElement('a');
             mainBtn.href = data.download_url;
             mainBtn.className = 'btn-download-main';
@@ -495,6 +683,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 reels: 'Reels',
                 dp: 'Profile DP',
                 stories: 'Stories',
+                highlights: 'Highlights',
                 photos: 'Photos'
             },
             dock: {
@@ -502,13 +691,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 reels: 'Reels',
                 dp: 'DP',
                 stories: 'Stories',
+                highlights: 'Highlights',
                 photos: 'Photos'
             },
             placeholders: {
-                all: 'Paste Instagram Reel, DP, Story, or Post URL...',
+                all: 'Paste Instagram Reel, DP, Story, Highlight, or Post URL...',
                 reels: 'Paste Instagram Reel link (e.g. https://www.instagram.com/reel/...)',
                 dp: 'Enter Username or Profile link (e.g. @cristiano or instagram.com/...)',
                 stories: 'Paste Instagram Story link or Username...',
+                highlights: 'Paste Instagram Highlight link (e.g. https://www.instagram.com/stories/highlights/...)',
                 photos: 'Paste Instagram Post / Carousel photo link...'
             },
             pasteBtn: 'Paste',
@@ -517,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
             detection: {
                 reel: 'Instagram Reel Detected',
                 story: 'Instagram Story Detected',
+                highlight: 'Instagram Highlight Detected',
                 post: 'Instagram Photo / Post Detected',
                 dp: 'Instagram DP / Profile Detected'
             },
@@ -551,6 +743,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 tipDpDesc: 'Simply enter any username (e.g. @cristiano) to view & zoom original full-size avatar.',
                 tipStoriesTitle: 'Stories & Highlights',
                 tipStoriesDesc: 'Paste profile link or story URL to download active 24h stories and highlight reels.'
+            },
+            ways: {
+                heading: 'Ways to Download <span class="gradient-text">Instagram Reels Video</span>',
+                subheading: 'Step-by-step instructions tailored for your smartphone or desktop',
+                tabIos: 'iPhone & iPad (iOS)',
+                tabAndroid: 'Android',
+                tabPC: 'Windows PC & Mac',
+                iosBadge: 'iOS Safari Flow',
+                iosTitle: 'How to Download Instagram Reels on iPhone (iOS)',
+                iosStep1: 'Open the <strong>Instagram app</strong> on your iPhone or iPad and navigate to your desired Reel video.',
+                iosStep2: 'Tap the paper airplane <strong>Share icon</strong> at the bottom right, then tap <strong>"Copy Link"</strong>.',
+                iosStep3: 'Open <strong>Safari</strong> browser, visit <strong>InstaGo</strong>, and tap the pink <strong>"Paste"</strong> button.',
+                iosStep4: 'Click <strong>"Download MP4"</strong>. Safari will display a native download prompt; click <strong>"Download"</strong>.',
+                iosStep5: 'Tap the blue Safari download circle, open the video, and tap <strong>Share &gt; Save Video</strong> to move it into your <strong>Photos App</strong>.',
+                androidBadge: 'Android Chrome Flow',
+                androidTitle: 'How to Download Instagram Reels on Android',
+                androidStep1: 'Launch Instagram on your Android device (Samsung, OnePlus, Xiaomi, Pixel, etc.).',
+                androidStep2: 'Go to the Reel video, tap the <strong>3 dots or Share icon</strong>, and choose <strong>"Copy link"</strong>.',
+                androidStep3: 'Open Google Chrome, navigate to <strong>InstaGo</strong>, and tap <strong>"Paste"</strong>.',
+                androidStep4: 'Tap <strong>"Download MP4 (1080p HD)"</strong>. Chrome will automatically download the file into your <strong>Downloads</strong> folder.',
+                androidStep5: 'The video immediately appears in your <strong>Google Photos</strong> or phone\'s <strong>Gallery</strong> app.',
+                pcBadge: 'Desktop PC & Mac Flow',
+                pcTitle: 'How to Download Instagram Reels on PC & Mac',
+                pcStep1: 'Open <strong>instagram.com</strong> in your Chrome, Edge, Safari, or Firefox browser on your desktop or laptop.',
+                pcStep2: 'Click on the Reel you want to download and copy the URL from the browser address bar or click the three dots icon to copy link.',
+                pcStep3: 'Paste the link into the search box on <strong>InstaGo</strong> and click <strong>Search</strong>.',
+                pcStep4: 'Click <strong>"Download MP4"</strong> to save the high-speed uncompressed video straight to your PC\'s <strong>Downloads</strong> directory.'
+            },
+            articles: {
+                art1Title: 'Download Instagram Reels Video without Watermark',
+                art1P1: 'InstaGo Reels Downloader is engineered to deliver <strong>100% original, watermark-free video streams</strong>. Unlike screen-recorders or basic tools that compress videos or stamp third-party branding over your favourite clips, InstaGo connects directly to high-speed Instagram CDN nodes to fetch the raw, native MP4 video file.',
+                art1P2: 'Whether you are an aspiring content creator archiving your portfolio, a video editor gathering inspiration, or simply saving funny Reels to share with family on WhatsApp, InstaGo ensures your video preserves its original 1080p Full HD resolution, rich dynamic colors, and pristine 320kbps stereo sound.',
+                art2Title: 'What is Instagram Reels & Why Save Them?',
+                art2P1: 'Instagram Reels is Meta\'s dynamic short-form video platform featuring 15 to 90-second creative multi-clip videos with trending audio tracks, AR augmented-reality filters, speed adjustments, and rich visual effects. Millions of viral tutorials, comedy skits, fitness routines, and travel guides are published daily.',
+                art2P2: 'However, Instagram does not provide an uncompressed native offline download option for public Reels. Using InstaGo, you can easily save unlimited public Reels directly into your phone\'s camera roll or desktop hard drive without requiring any Instagram login, password, or third-party app installations.'
             },
             features: {
                 heading: 'Why Choose <span class="gradient-text">InstaGo</span>?',
@@ -592,11 +819,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 a8: 'Downloading public Instagram videos for personal offline watching, archival, or educational fair use is permitted. Please respect creators’ copyrights and avoid commercial redistribution without permission.'
             },
             footer: {
+                tagline: 'The fastest, 100% anonymous & watermark-free Instagram media downloader. Save HD Reels, Stories, DP, and Photos in 1080p.',
                 disclaimer: '<strong>Disclaimer:</strong> InstaGo is an independent tool and is not affiliated, endorsed, or associated with Instagram, Meta, or Facebook. We do not host any copyrighted videos or photos on our servers; all media files are served directly from official CDN servers.',
+                chip1: '100% Free Forever',
+                chip2: 'No Login Required',
+                chip3: 'Zero Watermark',
+                colTools: 'Instagram Tools',
                 linkReels: 'Reels Downloader',
                 linkDP: 'DP Downloader',
                 linkStories: 'Story Downloader',
+                linkHighlights: 'Highlights Downloader',
+                linkPhotos: 'Photo Downloader',
+                colGuides: 'Device Guides',
+                devIos: 'iPhone & iPad',
+                devAndroid: 'Android',
+                devPC: 'Windows PC',
+                devMac: 'Mac OS',
+                colLegal: 'Legal & Policy',
+                legPrivacy: 'Privacy Policy',
+                legTerms: 'Terms of Service',
+                legAbout: 'About Us',
+                legContact: 'Contact & DMCA',
+                shareLabel: 'Share InstaGo with Friends:',
                 copyright: `&copy; ${new Date().getFullYear()} <strong>InstaGo</strong>. All rights reserved. Fast & Simple Instagram Downloader.`
+            },
+            legal: {
+                tabPrivacy: 'Privacy Policy',
+                tabTerms: 'Terms of Service',
+                tabAbout: 'About Us',
+                tabContact: 'Contact Us',
+                panePrivacy: `<h3>Privacy Policy &amp; Cookie Disclosure</h3>
+<p class="modal-date">Last Updated: ${new Date().toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</p>
+<p>At InstaGo, one of our main priorities is the privacy of our visitors. This Privacy Policy document outlines the types of information collected and how we use it in strict compliance with Google AdSense Policies, CCPA, and GDPR.</p>
+<h4>1. Zero Log &amp; No Account Policy</h4>
+<p>InstaGo does not require you to register, log in, or provide any personal credentials (such as Instagram username, password, or cookies). We do not record search queries or build personal profiles of our users.</p>
+<h4>2. Google DoubleClick DART Cookies &amp; AdSense</h4>
+<p>Google is one of our third-party vendors on our site. It uses cookies, known as DART cookies, to serve ads to our site visitors based upon their visit to this website and other sites on the internet. You may choose to opt out of the use of DART cookies by visiting the Google Ad and Content Network Privacy Policy at <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">policies.google.com/technologies/ads</a>.</p>
+<h4>3. CDN &amp; Server Logs</h4>
+<p>Like standard web hosts, our web servers record standard HTTP request logs (IP address, browser type, timestamp, referring URL). This data is used solely for system administration, fraud prevention, and performance optimization.</p>`,
+                paneTerms: `<h3>Terms of Service &amp; Fair Use</h3>
+<p class="modal-date">Last Updated: ${new Date().toLocaleDateString('en-US', {month: 'long', year: 'numeric'})}</p>
+<p>By accessing or using InstaGo, you agree to be bound by these Terms of Service. If you disagree with any part of these terms, please do not use our service.</p>
+<h4>1. Educational &amp; Personal Use</h4>
+<p>InstaGo is provided strictly as an educational utility to assist users in making personal backup copies of public Instagram content they have legitimate rights to access under fair use doctrines.</p>
+<h4>2. Intellectual Property Rights</h4>
+<p>InstaGo does not own, host, or store any video, audio, or image files on its servers. All media files are retrieved on-the-fly and streamed directly from Instagram's official CDN. All copyrights, trademarks, and intellectual property remain the sole property of their respective creators and Meta Platforms Inc.</p>
+<h4>3. User Responsibility &amp; Commercial Prohibition</h4>
+<p>Users are strictly prohibited from utilizing InstaGo to pirate copyrighted work, distribute uncredited intellectual property, or use downloaded materials for unauthorized commercial purposes.</p>`,
+                paneAbout: `<h3>About InstaGo</h3>
+<p>InstaGo was founded with a clear mission: to provide the fastest, cleanest, and most reliable Instagram media downloader without intrusive popups, forced software downloads, or privacy compromises.</p>
+<h4>Why Millions Choose InstaGo:</h4>
+<ul>
+    <li><strong>Pure 1080p Fidelity:</strong> We never downscale or watermark original Instagram Reels or Photos.</li>
+    <li><strong>Safe &amp; Anonymous:</strong> Zero trackers, zero login walls, and zero stored personal data.</li>
+    <li><strong>Lightning Fast CDN:</strong> Distributed nodes for instantaneous stream fetching.</li>
+    <li><strong>Every Device Supported:</strong> Fully responsive on iOS Safari, Android, tablets, and desktop computers.</li>
+</ul>`,
+                paneContact: `<h3>Contact &amp; DMCA Inquiry</h3>
+<p>We value user feedback, technical inquiries, and DMCA safe harbor notifications. If you have questions, feedback, or DMCA inquiries, please reach out to our dedicated support team:</p>
+<div class="contact-card-box">
+    <p><strong>Official Inquiries &amp; Support:</strong> support@instago.app</p>
+    <p><strong>DMCA &amp; Copyright Compliance:</strong> dmca@instago.app</p>
+    <p><strong>Response Time:</strong> Typically within 24 to 48 business hours.</p>
+</div>`
             }
         },
         gu: {
@@ -610,6 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 reels: 'રીલ્સ',
                 dp: 'પ્રોફાઇલ DP',
                 stories: 'સ્ટોરીઝ',
+                highlights: 'હાઇલાઇટ્સ',
                 photos: 'ફોટોઝ'
             },
             dock: {
@@ -617,13 +903,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 reels: 'રીલ્સ',
                 dp: 'DP',
                 stories: 'સ્ટોરીઝ',
+                highlights: 'હાઇલાઇટ્સ',
                 photos: 'ફોટોઝ'
             },
             placeholders: {
-                all: 'ઇન્સ્ટાગ્રામ રીલ, DP, સ્ટોરી કે પોસ્ટ લિંક પેસ્ટ કરો...',
+                all: 'ઇન્સ્ટાગ્રામ રીલ, DP, સ્ટોરી, હાઇલાઇટ કે પોસ્ટ લિંક પેસ્ટ કરો...',
                 reels: 'ઇન્સ્ટાગ્રામ રીલ લિંક પેસ્ટ કરો (જેમ કે instagram.com/reel/...)',
                 dp: 'યુઝરનેમ અથવા પ્રોફાઇલ લિંક નાખો (જેમ કે @cristiano)',
                 stories: 'ઇન્સ્ટાગ્રામ સ્ટોરી લિંક અથવા યુઝરનેમ નાખો...',
+                highlights: 'ઇન્સ્ટાગ્રામ હાઇલાઇટ લિંક પેસ્ટ કરો (જેમ કે instagram.com/stories/highlights/...)',
                 photos: 'ઇન્સ્ટાગ્રામ ફોટો / કેરોયુઝલ લિંક પેસ્ટ કરો...'
             },
             pasteBtn: 'પેસ્ટ',
@@ -632,6 +920,7 @@ document.addEventListener('DOMContentLoaded', () => {
             detection: {
                 reel: 'ઇન્સ્ટાગ્રામ રીલ મળી',
                 story: 'ઇન્સ્ટાગ્રામ સ્ટોરી મળી',
+                highlight: 'ઇન્સ્ટાગ્રામ હાઇલાઇટ મળી',
                 post: 'ઇન્સ્ટાગ્રામ ફોટો/પોસ્ટ મળી',
                 dp: 'ઇન્સ્ટાગ્રામ પ્રોફાઇલ DP મળી'
             },
@@ -669,6 +958,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 tipDpDesc: 'માત્ર યુઝરનેમ (જેમ કે @cristiano) લખો અને કોઈપણ યુઝરનો ઓરિજિનલ HD ફોટો જુઓ અથવા ડાઉનલોડ કરો.',
                 tipStoriesTitle: 'સ્ટોરી અને હાઇલાઇટ્સ',
                 tipStoriesDesc: 'પ્રોફાઇલ અથવા સ્ટોરી લિંક નાખીને 24 કલાકની એક્ટિવ સ્ટોરી અને હાઇલાઇટ્સ સેવ કરો.'
+            },
+            ways: {
+                heading: 'ઇન્સ્ટાગ્રામ રીલ્સ વિડિયો <span class="gradient-text">ડાઉનલોડ કરવાની રીતો</span>',
+                subheading: 'તમારા સ્માર્ટફોન અથવા ડેસ્કટોપ માટે સ્ટેપ-બાય-સ્ટેપ સરળ માર્ગદર્શિકા',
+                tabIos: 'iPhone અને iPad (iOS)',
+                tabAndroid: 'Android',
+                tabPC: 'Windows PC અને Mac',
+                iosBadge: 'iOS સફારી ગાઇડ',
+                iosTitle: 'iPhone (iOS) પર ઇન્સ્ટાગ્રામ રીલ્સ કેવી રીતે ડાઉનલોડ કરવી?',
+                iosStep1: 'તમારા iPhone અથવા iPad પર <strong>ઇન્સ્ટાગ્રામ એપ</strong> ખોલો અને તમારી પસંદગીની રીલ વિડિયો પર જાઓ.',
+                iosStep2: 'નીચે જમણી બાજુએ આપેલા <strong>શેર આઇકોન</strong> પર ટેપ કરો, પછી <strong>"Copy Link"</strong> પર ક્લિક કરો.',
+                iosStep3: '<strong>Safari</strong> બ્રાઉઝર ખોલો, <strong>InstaGo</strong> પર જાઓ અને <strong>"Paste"</strong> બટન પર ટેપ કરો.',
+                iosStep4: '<strong>"Download MP4"</strong> પર ક્લિક કરો. Safari માં ડાઉનલોડ પોપઅપ આવશે, તેમાં <strong>"Download"</strong> પસંદ કરો.',
+                iosStep5: 'વાદળી Safari ડાઉનલોડ આઇકન પર ટેપ કરો, વિડિયો ઓપન કરો અને <strong>Share &gt; Save Video</strong> પર ક્લિક કરીને તમારી <strong>Photos એપ</strong> માં સેવ કરો.',
+                androidBadge: 'Android ક્રોમ ગાઇડ',
+                androidTitle: 'Android ફોન પર ઇન્સ્ટાગ્રામ રીલ્સ કેવી રીતે ડાઉનલોડ કરવી?',
+                androidStep1: 'તમારા એન્ડ્રોઇડ ફોન (Samsung, OnePlus, Xiaomi, Pixel વગેરે) પર ઇન્સ્ટાગ્રામ એપ ઓપન કરો.',
+                androidStep2: 'રીલ વિડિયો પર જાઓ, <strong>3 ડોટ્સ અથવા શેર આઇકન</strong> પર ટેપ કરો અને <strong>"Copy link"</strong> પસંદ કરો.',
+                androidStep3: 'Google Chrome ખોલો, <strong>InstaGo</strong> વેબસાઇટ પર જાઓ અને <strong>"Paste"</strong> બટન દબાવો.',
+                androidStep4: '<strong>"Download MP4 (1080p HD)"</strong> પર ક્લિક કરો. ક્રોમ આપમેળે તમારા <strong>Downloads</strong> ફોલ્ડરમાં ફાઇલ સેવ કરશે.',
+                androidStep5: 'આ વિડિયો તરત જ તમારી ફોનની <strong>Gallery</strong> અથવા <strong>Google Photos</strong> એપમાં દેખાવા લાગશે.',
+                pcBadge: 'Desktop PC અને Mac ગાઇડ',
+                pcTitle: 'PC અને Mac કમ્પ્યુટર પર ઇન્સ્ટાગ્રામ રીલ્સ કેવી રીતે ડાઉનલોડ કરવી?',
+                pcStep1: 'તમારા કમ્પ્યુટર અથવા લેપટોપમાં Chrome, Edge કે Safari બ્રાઉઝરમાં <strong>instagram.com</strong> ખોલો.',
+                pcStep2: 'તમારે જે રીલ ડાઉનલોડ કરવી હોય તેની લિંક એડ્રેસ બારમાંથી અથવા 3 ડોટ્સ મેનૂમાંથી કોપી કરો.',
+                pcStep3: 'તે લિંકને <strong>InstaGo</strong> ના સર્ચ બોક્સમાં પેસ્ટ કરો અને <strong>Search</strong> પર ક્લિક કરો.',
+                pcStep4: '<strong>"Download MP4"</strong> પર ક્લિક કરો અને ઓરિજિનલ હાઇ-ક્વોલિટી વિડિયો સીધો તમારા PC ના <strong>Downloads</strong> ફોલ્ડરમાં સેવ કરો.'
+            },
+            articles: {
+                art1Title: 'કોઈપણ વોટરમાર્ક વગર ઇન્સ્ટાગ્રામ રીલ્સ વિડિયો ડાઉનલોડ કરો',
+                art1P1: 'InstaGo રીલ્સ ડાઉનલોડર <strong>100% ઓરિજિનલ, વોટરમાર્ક-મુક્ત વિડિયો</strong> પ્રદાન કરવા માટે બનાવવામાં આવ્યું છે. સાદા સ્ક્રીન-રેકોર્ડર્સ કે અન્ય ટૂલ્સ જે વિડિયો ક્વોલિટી ઘટાડે છે અથવા લોગો છાપે છે તેનાથી વિપરીત, InstaGo સીધા હાઇ-સ્પીડ ઇન્સ્ટાગ્રામ CDN સર્વર્સ સાથે કનેક્ટ થઈને ઓરિજિનલ MP4 ફાઇલ લાવે છે.',
+                art1P2: 'તમે કન્ટેન્ટ ક્રિએટર હોવ, વિડિયો એડિટર હોવ કે વોટ્સએપ પર પરિવાર સાથે ફની રીલ્સ શેર કરવા માગતા હોવ, InstaGo તમારા વિડિયોનું 1080p ફુલ HD રિઝોલ્યુશન, ઉત્તમ કલર્સ અને ઓરિજિનલ ક્લિયર સાઉન્ડ અકબંધ રાખે છે.',
+                art2Title: 'ઇન્સ્ટાગ્રામ રીલ્સ શું છે અને તેને શા માટે સેવ કરવી જોઈએ?',
+                art2P1: 'ઇન્સ્ટાગ્રામ રીલ્સ એ મેટાનું શોર્ટ-વિડિયો પ્લેટફોર્મ છે જેમાં ટ્રેન્ડિંગ મ્યુઝિક, સ્પેશિયલ ઇફેક્ટ્સ અને ફિલ્ટર્સ સાથે 15 થી 90 સેકન્ડના ક્રિએટિવ વિડિઓઝ હોય છે. દરરોજ લાખો વાયરલ ટ્યુટોરિયલ્સ, કોમેડી અને ટ્રાવેલ ગાઇડ્સ પબ્લિશ થાય છે.',
+                art2P2: 'જોકે, ઇન્સ્ટાગ્રામ એપ્લિકેશનમાં ઓફલાઇન સેવ કરવાનો ડાયરેક્ટ ઓપ્શન હોતો નથી. InstaGo ની મદદથી તમે કોઈપણ લોગિન કે પાસવર્ડ આપ્યા વગર અનલિમિટેડ પબ્લિક રીલ્સ સીધા તમારી ગેલેરીમાં કે કમ્પ્યુટરમાં સેવ કરી શકો છો.'
             },
             features: {
                 heading: 'શા માટે <span class="gradient-text">InstaGo</span> પસંદ કરવું?',
@@ -710,11 +1034,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 a8: 'વ્યક્તિગત ઓફલાઇન જોવા કે એજ્યુકેશનલ ફેર-યુઝ માટે પબ્લિક વિડીયો સેવ કરવાની મંજૂરી છે. કૃપા કરીને ક્રિએટરના કોપીરાઇટનું સન્માન કરો.'
             },
             footer: {
+                tagline: 'સૌથી ઝડપી, 100% ગુપ્ત અને વોટરમાર્ક-મુક્ત ઇન્સ્ટાગ્રામ ડાઉનલોડર. HD રીલ્સ, સ્ટોરીઝ, DP અને ફોટો 1080p માં સેવ કરો.',
                 disclaimer: '<strong>ડિસ્ક્લેમર:</strong> InstaGo એક સ્વતંત્ર ટૂલ છે અને Instagram, Meta કે Facebook સાથે સંલગ્ન નથી. અમે અમારા સર્વર પર કોઈપણ કોપીરાઇટ વિડીયો કે ફોટો હોસ્ટ કરતા નથી; તમામ મીડિયા સત્તાવાર CDN સર્વર પરથી સીધા પહોંચાડાય છે.',
+                chip1: '100% કાયમ માટે મફત',
+                chip2: 'કોઈ લોગિન જરૂરી નથી',
+                chip3: 'ઝીરો વોટરમાર્ક',
+                colTools: 'ઇન્સ્ટાગ્રામ ટૂલ્સ',
                 linkReels: 'રીલ્સ ડાઉનલોડર',
                 linkDP: 'DP ડાઉનલોડર',
                 linkStories: 'સ્ટોરી ડાઉનલોડર',
+                linkHighlights: 'હાઇલાઇટ્સ ડાઉનલોડર',
+                linkPhotos: 'ફોટો ડાઉનલોડર',
+                colGuides: 'ડિવાઇસ ગાઇડ્સ',
+                devIos: 'iPhone અને iPad',
+                devAndroid: 'એન્ડ્રોઇડ (Android)',
+                devPC: 'વિન્ડોઝ PC',
+                devMac: 'મેક OS (Mac)',
+                colLegal: 'કાનૂની અને નીતિ',
+                legPrivacy: 'પ્રાઇવસી પોલિસી',
+                legTerms: 'સેવાની શરતો',
+                legAbout: 'અમારા વિશે',
+                legContact: 'સંપર્ક અને DMCA',
+                shareLabel: 'મિત્રો સાથે InstaGo શેર કરો:',
                 copyright: `&copy; ${new Date().getFullYear()} <strong>InstaGo</strong>. સર્વાધિકાર સુરક્ષિત. ઝડપી અને સરળ ઇન્સ્ટાગ્રામ ડાઉનલોડર.`
+            },
+            legal: {
+                tabPrivacy: 'પ્રાઇવસી પોલિસી',
+                tabTerms: 'સેવાની શરતો',
+                tabAbout: 'અમારા વિશે',
+                tabContact: 'સંપર્ક કરો',
+                panePrivacy: `<h3>પ્રાઇવસી પોલિસી અને કૂકી ડિસ્ક્લોઝર</h3>
+<p class="modal-date">છેલ્લું અપડેટ: ${new Date().toLocaleDateString('gu-IN', {month: 'long', year: 'numeric'})}</p>
+<p>InstaGo પર અમારા મુલાકાતીઓની ગોપનીયતા (Privacy) અમારી સર્વોચ્ચ પ્રાથમિકતા છે. આ પ્રાઇવસી પોલિસી દસ્તાવેજ સમજાવે છે કે કઈ માહિતી એકત્રિત થાય છે અને અમે Google AdSense નીતિઓ, CCPA અને GDPR નું કઈ રીતે ચુસ્ત પાલન કરીએ છીએ.</p>
+<h4>૧. ઝીરો લોગ અને નો-એકાઉન્ટ પોલિસી</h4>
+<p>InstaGo નો ઉપયોગ કરવા માટે તમારે કોઈપણ રજીસ્ટ્રેશન, લોગિન અથવા અંગત ઓળખ (જેમ કે ઇન્સ્ટાગ્રામ યુઝરનેમ, પાસવર્ડ કે કૂકીઝ) આપવાની જરૂર નથી. અમે કોઈપણ સર્ચ ક્વેરી રેકોર્ડ કરતા નથી કે યુઝર પ્રોફાઇલ બનાવતા નથી.</p>
+<h4>૨. ગુગલ ડબલક્લિક DART કૂકીઝ અને એડસેન્સ</h4>
+<p>ગૂગલ અમારી વેબસાઇટ પર થર્ડ-પાર્ટી વેન્ડર છે. તે મુલાકાતીઓને તેમની મુલાકાતના આધારે યોગ્ય જાહેરાતો બતાવવા માટે DART કૂકીઝનો ઉપયોગ કરે છે. તમે <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">policies.google.com/technologies/ads</a> પર જઈને આ કૂકીઝને બંધ કરવાનો વિકલ્પ પસંદ કરી શકો છો.</p>
+<h4>૩. CDN અને સર્વર લોગ્સ</h4>
+<p>અન્ય વેબસાઇટ્સની જેમ અમારા સર્વર્સ સામાન્ય ટેકનિકલ વિગતો (જેમ કે બ્રાઉઝરનો પ્રકાર, સમય) રેકોર્ડ કરે છે. આ ડેટાનો ઉપયોગ ફક્ત સિસ્ટમ મેનેજમેન્ટ, છેતરપિંડી અટકાવવા અને સ્પીડ વધારવા માટે જ થાય છે.</p>`,
+                paneTerms: `<h3>સેવાની શરતો અને ફેર-યુઝ પોલિસી</h3>
+<p class="modal-date">છેલ્લું અપડેટ: ${new Date().toLocaleDateString('gu-IN', {month: 'long', year: 'numeric'})}</p>
+<p>InstaGo સેવાનો ઉપયોગ કરીને, તમે આ સેવાની શરતોનું પાલન કરવા સંમત થાઓ છો. જો તમે કોઈપણ શરત સાથે સંમત ન હોવ, તો કૃપા કરીને સેવાનો ઉપયોગ કરશો નહીં.</p>
+<h4>૧. શૈક્ષણિક અને વ્યક્તિગત ઉપયોગ</h4>
+<p>InstaGo નો હેતુ ફક્ત શૈક્ષણિક અને વ્યક્તિગત બેકઅપ માટે પબ્લિક ઇન્સ્ટાગ્રામ વિડિયો સેવ કરવામાં મદદ કરવાનો છે, જે ફેર-યુઝ નિયમો હેઠળ આવે છે.</p>
+<h4>૨. બૌદ્ધિક સંપદા અને કોપીરાઇટ</h4>
+<p>InstaGo પોતાના સર્વર પર કોઈપણ વિડિયો કે ફોટો હોસ્ટ કે સ્ટોર કરતું નથી. તમામ ફાઇલો સત્તાવાર ઇન્સ્ટાગ્રામ CDN પરથી સીધી સ્ટ્રીમ થાય છે. તમામ કોપીરાઇટ અને ટ્રેડમાર્ક્સ તેમના સંબંધિત ક્રિએટર્સ અને Meta Platforms Inc. ના રહે છે.</p>
+<h4>૩. વપરાશકર્તાની જવાબદારી અને વ્યાપારી પ્રતિબંધ</h4>
+<p>કોપીરાઇટ કરેલી સામગ્રીની અનધિકૃત વ્યાપારી વહેંચણી કે પુનઃઉત્પાદન માટે InstaGo નો ઉપયોગ કરવાની સખત મનાઈ છે.</p>`,
+                paneAbout: `<h3>InstaGo વિશે</h3>
+<p>InstaGo ની શરૂઆત એક સ્પષ્ટ ધ્યેય સાથે કરવામાં આવી છે: કોઈપણ હેરાન કરતી પોપઅપ જાહેરાતો કે વધારાના સોફ્ટવેર ઇન્સ્ટોલ કર્યા વગર સૌથી ઝડપી, સ્વચ્છ અને વિશ્વસનીય ઇન્સ્ટાગ્રામ ડાઉનલોડિંગ સેવા પૂરી પાડવી.</p>
+<h4>શા માટે લાખો લોકો InstaGo પસંદ કરે છે:</h4>
+<ul>
+    <li><strong>૧૦૦% ૧૦૮૦p ઓરિજિનલ ક્વોલિટી:</strong> અમે ક્યારેય વિડિયો ક્વોલિટી ઘટાડતા નથી કે તેના પર વોટરમાર્ક લગાવતા નથી.</li>
+    <li><strong>સુરક્ષિત અને ગુપ્ત:</strong> કોઈ ટ્રેકર્સ નહીં, કોઈ લોગિન વોલ નહીં અને કોઈ પર્સનલ ડેટા સેવ થતો નથી.</li>
+    <li><strong>સુપરફાસ્ટ સ્પીડ:</strong> ઇન્સ્ટાગ્રામ સર્વર્સ સાથે સીધું કનેક્શન હોવાથી પળવારમાં ડાઉનલોડ થાય છે.</li>
+    <li><strong>તમામ ડિવાઇસ સપોર્ટ:</strong> iPhone Safari, Android, ટેબ્લેટ અને PC પર પરફેક્ટ કામ કરે છે.</li>
+</ul>`,
+                paneContact: `<h3>સંપર્ક અને DMCA પૂછપરછ</h3>
+<p>અમે અમારા વપરાશકર્તાઓના ફીડબેક, પ્રશ્નો અને DMCA સૂચનાઓનું સ્વાગત કરીએ છીએ. કોઈપણ સહાય કે પૂછપરછ માટે અમારી ટીમને ઇમેઇલ કરો:</p>
+<div class="contact-card-box">
+    <p><strong>સત્તાવાર સપોર્ટ ઇમેઇલ:</strong> support@instago.app</p>
+    <p><strong>DMCA અને કોપીરાઇટ સંપર્ક:</strong> dmca@instago.app</p>
+    <p><strong>જવાબ આપવાનો સમય:</strong> સામાન્ય રીતે ૨૪ થી ૪૮ કલાકની અંદર.</p>
+</div>`
             }
         },
         hi: {
@@ -728,6 +1110,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 reels: 'रील्स',
                 dp: 'प्रोफाइल DP',
                 stories: 'स्टोरीज',
+                highlights: 'हाइलाइट्स',
                 photos: 'फोटो'
             },
             dock: {
@@ -735,13 +1118,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 reels: 'रील्स',
                 dp: 'DP',
                 stories: 'स्टोरीज',
+                highlights: 'हाइलाइट्स',
                 photos: 'फोटो'
             },
             placeholders: {
-                all: 'इंस्टाग्राम रील, DP, स्टोरी या पोस्ट लिंक पेस्ट करें...',
+                all: 'इंस्टाग्राम रील, DP, स्टोरी, हाइलाइट या पोस्ट लिंक पेस्ट करें...',
                 reels: 'इंस्टाग्राम रील लिंक पेस्ट करें (जैसे instagram.com/reel/...)',
                 dp: 'यूजरनेम या प्रोफाइल लिंक दर्ज करें (जैसे @cristiano)',
                 stories: 'इंस्टाग्राम स्टोरी लिंक या यूजरनेम दर्ज करें...',
+                highlights: 'इंस्टाग्राम हाइलाइट लिंक पेस्ट करें (जैसे instagram.com/stories/highlights/...)',
                 photos: 'इंस्टाग्राम फोटो / हिंडोला पोस्ट लिंक पेस्ट करें...'
             },
             pasteBtn: 'पेस्ट',
@@ -750,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             detection: {
                 reel: 'इंस्टाग्राम रील मिली',
                 story: 'इंस्टाग्राम स्टोरी मिली',
+                highlight: 'इंस्टाग्राम हाइलाइट मिली',
                 post: 'इंस्टाग्राम फोटो/पोस्ट मिली',
                 dp: 'इंस्टाग्राम प्रोफाइल DP मिली'
             },
@@ -787,6 +1173,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 tipDpDesc: 'सिर्फ यूजरनेम (जैसे @cristiano) डालें और किसी भी प्रोफाइल की ओरिजिनल साइज DP डाउनलोड करें।',
                 tipStoriesTitle: 'स्टोरी और हाइलाइट्स',
                 tipStoriesDesc: 'प्रोफाइल लिंक या स्टोरी URL डालकर 24 घंटे की एक्टिव स्टोरी और हाइलाइट्स सेव करें।'
+            },
+            ways: {
+                heading: 'इंस्टाग्राम रील्स वीडियो <span class="gradient-text">डाउनलोड करने के तरीके</span>',
+                subheading: 'आपके स्मार्टफोन या डेस्कटॉप के लिए स्टेप-बाय-स्टेप आसान निर्देश',
+                tabIos: 'iPhone और iPad (iOS)',
+                tabAndroid: 'Android',
+                tabPC: 'Windows PC और Mac',
+                iosBadge: 'iOS सफारी गाइड',
+                iosTitle: 'iPhone (iOS) पर इंस्टाग्राम रील्स कैसे डाउनलोड करें?',
+                iosStep1: 'अपने iPhone या iPad पर <strong>इंस्टाग्राम ऐप</strong> खोलें और अपनी पसंदीदा रील वीडियो पर जाएं।',
+                iosStep2: 'नीचे दाईं ओर दिए गए <strong>शेयर आइकन</strong> पर टैप करें, फिर <strong>"Copy Link"</strong> चुनें।',
+                iosStep3: '<strong>Safari</strong> ब्राउज़र खोलें, <strong>InstaGo</strong> पर जाएं और <strong>"Paste"</strong> बटन दबाएं।',
+                iosStep4: '<strong>"Download MP4"</strong> पर क्लिक करें। Safari में डाउनलोड प्रॉम्प्ट दिखेगा, उसमें <strong>"Download"</strong> चुनें।',
+                iosStep5: 'सफारी डाउनलोड आइकन पर टैप करें, वीडियो खोलें और <strong>Share &gt; Save Video</strong> चुनकर अपनी <strong>Photos ऐप</strong> में सुरक्षित करें।',
+                androidBadge: 'Android क्रोम गाइड',
+                androidTitle: 'Android फोन पर इंस्टाग्राम रील्स कैसे डाउनलोड करें?',
+                androidStep1: 'अपने एंड्रॉइड फोन (Samsung, OnePlus, Xiaomi, Pixel आदि) पर इंस्टाग्राम खोलें।',
+                androidStep2: 'रील वीडियो पर जाएं, <strong>3 डॉट्स या शेयर आइकन</strong> पर टैप करें और <strong>"Copy link"</strong> चुनें।',
+                androidStep3: 'Google Chrome खोलें, <strong>InstaGo</strong> पर जाएं और <strong>"Paste"</strong> बटन दबाएं।',
+                androidStep4: '<strong>"Download MP4 (1080p HD)"</strong> पर टैप करें। क्रोम आपके <strong>Downloads</strong> फोल्डर में वीडियो डाउनलोड कर देगा।',
+                androidStep5: 'यह वीडियो तुरंत आपके फोन की <strong>Gallery</strong> या <strong>Google Photos</strong> ऐप में दिखाई देगा।',
+                pcBadge: 'Desktop PC और Mac गाइड',
+                pcTitle: 'PC और Mac कंप्यूटर पर इंस्टाग्राम रील्स कैसे डाउनलोड करें?',
+                pcStep1: 'अपने कंप्यूटर या लैपटॉप में Chrome, Edge या Safari ब्राउज़र में <strong>instagram.com</strong> खोलें।',
+                pcStep2: 'जिस रील को डाउनलोड करना है उसका लिंक ब्राउज़र एड्रेस बार या 3 डॉट्स मेनू से कॉपी करें।',
+                pcStep3: 'उस लिंक को <strong>InstaGo</strong> के सर्च बॉक्स में पेस्ट करें और <strong>Search</strong> पर क्लिक करें।',
+                pcStep4: '<strong>"Download MP4"</strong> पर क्लिक करके ओरिजिनल हाई-क्वालिटी वीडियो सीधे अपने PC के <strong>Downloads</strong> फोल्डर में सेव करें।'
+            },
+            articles: {
+                art1Title: 'बिना किसी वॉटरमार्क के इंस्टाग्राम रील्स वीडियो डाउनलोड करें',
+                art1P1: 'InstaGo रील्स डाउनलोडर <strong>100% ओरिजिनल, वॉटरमार्क-फ्री वीडियो</strong> देने के लिए तैयार किया गया है। स्क्रीन-रिकॉर्डर या अन्य टूल्स जो वीडियो कंप्रेस करते हैं या लोगो लगाते हैं, उनसे अलग InstaGo सीधे हाई-स्पीड इंस्टाग्राम CDN सर्वर से ओरिजिनल MP4 वीडियो लाता है।',
+                art1P2: 'चाहे आप कंटेंट क्रिएटर हों, वीडियो एडिटर हों या व्हाट्सएप पर दोस्तों के साथ रील शेयर करना चाहते हों, InstaGo आपके वीडियो का 1080p फुल HD रेजोल्यूशन और शानदार ऑडियो सुरक्षित रखता है।',
+                art2Title: 'इंस्टाग्राम रील्स क्या हैं और इन्हें क्यों सेव करें?',
+                art2P1: 'इंस्टाग्राम रील्स मेटा का शॉर्ट-वीडियो प्लेटफॉर्म है जिसमें ट्रेंडिंग म्यूजिक और स्पेशल इफेक्ट्स के साथ 15 से 90 सेकंड के वीडियो होते हैं। रोज़ाना लाखों वायरल ट्यूटोरियल्स, कॉमेडी और ट्रैवल वीडियो पब्लिश होते हैं।',
+                art2P2: 'लेकिन इंस्टाग्राम सीधे फोन में ऑफलाइन सेव करने की अनुमति नहीं देता। InstaGo से आप बिना किसी लॉगिन या पासवर्ड के सीधे अपनी गैलरी या कंप्यूटर में मनचाही रील्स सेव कर सकते हैं।'
             },
             features: {
                 heading: 'क्यों चुनें <span class="gradient-text">InstaGo</span>?',
@@ -828,11 +1249,69 @@ document.addEventListener('DOMContentLoaded', () => {
                 a8: 'व्यक्तिगत ऑफलाइन देखने या फेयर-यूज़ के लिए पब्लिक वीडियो डाउनलोड करना पूरी तरह सामान्य और अनुमत है। कृपया क्रिएटर्स के कॉपीराइट का सम्मान करें।'
             },
             footer: {
+                tagline: 'सबसे तेज़, 100% सुरक्षित और वॉटरमार्क-फ्री इंस्टाग्राम डाउनलोडर। HD रील्स, स्टोरीज, DP और फोटो 1080p में सेव करें।',
                 disclaimer: '<strong>डिस्क्लेमर:</strong> InstaGo एक स्वतंत्र टूल है और Instagram, Meta या Facebook से संबद्ध नहीं है। हम अपने सर्वर पर कोई भी कॉपीराइट वीडियो या फोटो होस्ट नहीं करते हैं; सभी मीडिया आधिकारिक CDN सर्वर से सीधे आते हैं।',
+                chip1: '100% हमेशा के लिए फ्री',
+                chip2: 'लॉगिन की आवश्यकता नहीं',
+                chip3: 'ज़ीरो वॉटरमार्क',
+                colTools: 'इंस्टाग्राम टूल्स',
                 linkReels: 'रील्स डाउनलोडर',
                 linkDP: 'DP डाउनलोडर',
                 linkStories: 'स्टोरी डाउनलोडर',
+                linkHighlights: 'हाइलाइट्स डाउनलोडर',
+                linkPhotos: 'फोटो डाउनलोडर',
+                colGuides: 'डिवाइस गाइड',
+                devIos: 'iPhone और iPad',
+                devAndroid: 'एंड्रॉइड (Android)',
+                devPC: 'विंडोज PC',
+                devMac: 'मैक OS (Mac)',
+                colLegal: 'कानूनी और नीतियां',
+                legPrivacy: 'प्राइवेसी पॉलिसी',
+                legTerms: 'सेवा की शर्तें',
+                legAbout: 'हमारे बारे में',
+                legContact: 'संपर्क और DMCA',
+                shareLabel: 'दोस्तों के साथ InstaGo शेयर करें:',
                 copyright: `&copy; ${new Date().getFullYear()} <strong>InstaGo</strong>. सर्वाधिकार सुरक्षित। तेज़ और आसान इंस्टाग्राम डाउनलोडर.`
+            },
+            legal: {
+                tabPrivacy: 'प्राइवेसी पॉलिसी',
+                tabTerms: 'सेवा की शर्तें',
+                tabAbout: 'हमारे बारे में',
+                tabContact: 'संपर्क करें',
+                panePrivacy: `<h3>प्राइवेसी पॉलिसी और कुकी प्रकटीकरण</h3>
+<p class="modal-date">अंतिम अपडेट: ${new Date().toLocaleDateString('hi-IN', {month: 'long', year: 'numeric'})}</p>
+<p>InstaGo पर हमारे विज़िटर्स की प्राइवेसी हमारी पहली प्राथमिकता है। यह प्राइवेसी पॉलिसी दस्तावेज़ बताता है कि कौन सी जानकारी एकत्र की जाती है और हम Google AdSense नीतियों, CCPA और GDPR का सख्ती से पालन कैसे करते हैं।</p>
+<h4>१. ज़ीरो लॉग और नो-अकाउंट पॉलिसी</h4>
+<p>InstaGo का उपयोग करने के लिए किसी रजिस्ट्रेशन, लॉगिन या व्यक्तिगत क्रेडेंशियल (जैसे इंस्टाग्राम यूजरनेम, पासवर्ड या कुकीज़) की आवश्यकता नहीं है। हम कोई सर्च हिस्ट्री रिकॉर्ड नहीं करते हैं।</p>
+<h4>२. गूगल डबलक्लिक DART कुकीज़ और एडसेंस</h4>
+<p>गूगल हमारी साइट पर थर्ड-पार्टी वेंडर है। यह उपयोगकर्ताओं को उनकी रुचि के अनुसार विज्ञापन दिखाने के लिए DART कुकीज़ का उपयोग करता है। आप <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">policies.google.com/technologies/ads</a> पर जाकर DART कुकीज़ बंद कर सकते हैं।</p>
+<h4>३. CDN और सर्वर लॉग्स</h4>
+<p>अन्य वेब होस्ट की तरह हमारे सर्वर तकनीकी HTTP लॉग (ब्राउज़र प्रकार, समय) रिकॉर्ड करते हैं, जिसका उपयोग केवल सिस्टम सुरक्षा और परफॉर्मेंस सुधार के लिए किया जाता है।</p>`,
+                paneTerms: `<h3>सेवा की शर्तें और फेयर-यूज़ नीति</h3>
+<p class="modal-date">अंतिम अपडेट: ${new Date().toLocaleDateString('hi-IN', {month: 'long', year: 'numeric'})}</p>
+<p>InstaGo का उपयोग करके, आप इन नियमों और शर्तों से बंधे होने के लिए सहमत होते हैं। यदि आप किसी भी शर्त से असहमत हैं, तो कृपया सेवा का उपयोग न करें।</p>
+<h4>१. शैक्षिक और व्यक्तिगत उपयोग</h4>
+<p>InstaGo केवल एक शैक्षिक टूल है जो उपयोगकर्ताओं को व्यक्तिगत बैकअप के लिए सार्वजनिक इंस्टाग्राम वीडियो सहेजने में मदद करता है।</p>
+<h4>२. बौद्धिक संपदा अधिकार</h4>
+<p>InstaGo अपने सर्वर पर कोई वीडियो या फोटो स्टोर नहीं करता है। सभी फाइलें आधिकारिक इंस्टाग्राम CDN से सीधे स्ट्रीम की जाती हैं। सभी कॉपीराइट मूल क्रिएटर्स और मेटा प्लेटफॉर्म्स के हैं।</p>
+<h4>३. यूजर की ज़िम्मेदारी और व्यावसायिक प्रतिबंध</h4>
+<p>कॉपीराइट सामग्री का अनधिकृत व्यावसायिक उपयोग करने या दूसरों के अधिकारों का उल्लंघन करने के लिए InstaGo का उपयोग करना सख्त वर्जित है।</p>`,
+                paneAbout: `<h3>InstaGo के बारे में</h3>
+<p>InstaGo की स्थापना एक स्पष्ट उद्देश्य के साथ की गई थी: बिना किसी कष्टप्रद विज्ञापनों या सॉफ़्टवेयर डाउनलोड के सबसे तेज़, स्वच्छ और विश्वसनीय इंस्टाग्राम डाउनलोडिंग सेवा प्रदान करना।</p>
+<h4>लाखों लोग InstaGo क्यों चुनते हैं:</h4>
+<ul>
+    <li><strong>१००% १०८૦p ओरिजिनल क्वालिटी:</strong> हम कभी भी वीडियो क्वालिटी कम नहीं करते हैं और न ही वॉटरमार्क लगाते हैं।</li>
+    <li><strong>सुरक्षित और गोपनीय:</strong> कोई लॉगिन की आवश्यकता नहीं, कोई व्यक्तिगत डेटा स्टोर नहीं होता।</li>
+    <li><strong>सुपरफास्ट CDN स्पीड:</strong> इंस्टाग्राम सर्वर से सीधा कनेक्शन होने के कारण तुरंत डाउनलोड।</li>
+    <li><strong>सभी डिवाइस पर समर्थित:</strong> iPhone Safari, Android, टैबलेट और PC पर बेहतरीन काम करता है।</li>
+</ul>`,
+                paneContact: `<h3>संपर्क और DMCA पूछताछ</h3>
+<p>हम यूजर फीडबैक और DMCA सुरक्षित हार्बर सूचनाओं को महत्व देते हैं। किसी भी प्रश्न या पूछताछ के लिए हमारी सहायता टीम से संपर्क करें:</p>
+<div class="contact-card-box">
+    <p><strong>आधिकारिक सपोर्ट ईमेल:</strong> support@instago.app</p>
+    <p><strong>DMCA और कॉपीराइट संपर्क:</strong> dmca@instago.app</p>
+    <p><strong>प्रतिक्रिया समय:</strong> आमतौर पर २४ से ४८ घंटों के भीतर।</p>
+</div>`
             }
         }
     };
@@ -867,22 +1346,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const tabReels = document.getElementById('tabLabelReels');
         const tabDP = document.getElementById('tabLabelDP');
         const tabStories = document.getElementById('tabLabelStories');
+        const tabHighlights = document.getElementById('tabLabelHighlights');
         const tabPhotos = document.getElementById('tabLabelPhotos');
         if (tabAll) tabAll.textContent = t.tabs.all;
         if (tabReels) tabReels.textContent = t.tabs.reels;
         if (tabDP) tabDP.textContent = t.tabs.dp;
         if (tabStories) tabStories.textContent = t.tabs.stories;
+        if (tabHighlights && t.tabs.highlights) tabHighlights.textContent = t.tabs.highlights;
         if (tabPhotos) tabPhotos.textContent = t.tabs.photos;
 
         const dockAll = document.getElementById('dockLabelAll');
         const dockReels = document.getElementById('dockLabelReels');
         const dockDP = document.getElementById('dockLabelDP');
         const dockStories = document.getElementById('dockLabelStories');
+        const dockHighlights = document.getElementById('dockLabelHighlights');
         const dockPhotos = document.getElementById('dockLabelPhotos');
         if (dockAll) dockAll.textContent = t.dock.all;
         if (dockReels) dockReels.textContent = t.dock.reels;
         if (dockDP) dockDP.textContent = t.dock.dp;
         if (dockStories) dockStories.textContent = t.dock.stories;
+        if (dockHighlights && t.dock.highlights) dockHighlights.textContent = t.dock.highlights;
         if (dockPhotos) dockPhotos.textContent = t.dock.photos;
 
         // 5. Input Actions & Placeholder
@@ -924,6 +1407,75 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tipDescDP) tipDescDP.textContent = t.guide.tipDpDesc;
         if (tipTitleStories) tipTitleStories.textContent = t.guide.tipStoriesTitle;
         if (tipDescStories) tipDescStories.textContent = t.guide.tipStoriesDesc;
+
+        // 8b. Device Guide Section (Ways to Download)
+        const waysH = document.getElementById('waysHeading');
+        const waysSub = document.getElementById('waysSubheading');
+        const tIos = document.getElementById('tabIos');
+        const tAnd = document.getElementById('tabAndroid');
+        const tPC = document.getElementById('tabPC');
+        if (waysH && t.ways) waysH.innerHTML = t.ways.heading;
+        if (waysSub && t.ways) waysSub.textContent = t.ways.subheading;
+        if (tIos && t.ways) tIos.textContent = t.ways.tabIos;
+        if (tAnd && t.ways) tAnd.textContent = t.ways.tabAndroid;
+        if (tPC && t.ways) tPC.textContent = t.ways.tabPC;
+
+        const iosB = document.getElementById('iosBadge');
+        const iosT = document.getElementById('iosGuideTitle');
+        const iosS1 = document.getElementById('iosStep1');
+        const iosS2 = document.getElementById('iosStep2');
+        const iosS3 = document.getElementById('iosStep3');
+        const iosS4 = document.getElementById('iosStep4');
+        const iosS5 = document.getElementById('iosStep5');
+        if (iosB && t.ways) iosB.textContent = t.ways.iosBadge;
+        if (iosT && t.ways) iosT.textContent = t.ways.iosTitle;
+        if (iosS1 && t.ways) iosS1.innerHTML = t.ways.iosStep1;
+        if (iosS2 && t.ways) iosS2.innerHTML = t.ways.iosStep2;
+        if (iosS3 && t.ways) iosS3.innerHTML = t.ways.iosStep3;
+        if (iosS4 && t.ways) iosS4.innerHTML = t.ways.iosStep4;
+        if (iosS5 && t.ways) iosS5.innerHTML = t.ways.iosStep5;
+
+        const andB = document.getElementById('androidBadge');
+        const andT = document.getElementById('androidGuideTitle');
+        const andS1 = document.getElementById('androidStep1');
+        const andS2 = document.getElementById('androidStep2');
+        const andS3 = document.getElementById('androidStep3');
+        const andS4 = document.getElementById('androidStep4');
+        const andS5 = document.getElementById('androidStep5');
+        if (andB && t.ways) andB.textContent = t.ways.androidBadge;
+        if (andT && t.ways) andT.textContent = t.ways.androidTitle;
+        if (andS1 && t.ways) andS1.innerHTML = t.ways.androidStep1;
+        if (andS2 && t.ways) andS2.innerHTML = t.ways.androidStep2;
+        if (andS3 && t.ways) andS3.innerHTML = t.ways.androidStep3;
+        if (andS4 && t.ways) andS4.innerHTML = t.ways.androidStep4;
+        if (andS5 && t.ways) andS5.innerHTML = t.ways.androidStep5;
+
+        const pcB = document.getElementById('pcBadge');
+        const pcT = document.getElementById('pcGuideTitle');
+        const pcS1 = document.getElementById('pcStep1');
+        const pcS2 = document.getElementById('pcStep2');
+        const pcS3 = document.getElementById('pcStep3');
+        const pcS4 = document.getElementById('pcStep4');
+        if (pcB && t.ways) pcB.textContent = t.ways.pcBadge;
+        if (pcT && t.ways) pcT.textContent = t.ways.pcTitle;
+        if (pcS1 && t.ways) pcS1.innerHTML = t.ways.pcStep1;
+        if (pcS2 && t.ways) pcS2.innerHTML = t.ways.pcStep2;
+        if (pcS3 && t.ways) pcS3.innerHTML = t.ways.pcStep3;
+        if (pcS4 && t.ways) pcS4.innerHTML = t.ways.pcStep4;
+
+        // 8c. SEO Articles Section
+        const a1T = document.getElementById('art1Title');
+        const a1P1 = document.getElementById('art1P1');
+        const a1P2 = document.getElementById('art1P2');
+        const a2T = document.getElementById('art2Title');
+        const a2P1 = document.getElementById('art2P1');
+        const a2P2 = document.getElementById('art2P2');
+        if (a1T && t.articles) a1T.textContent = t.articles.art1Title;
+        if (a1P1 && t.articles) a1P1.innerHTML = t.articles.art1P1;
+        if (a1P2 && t.articles) a1P2.innerHTML = t.articles.art1P2;
+        if (a2T && t.articles) a2T.textContent = t.articles.art2Title;
+        if (a2P1 && t.articles) a2P1.innerHTML = t.articles.art2P1;
+        if (a2P2 && t.articles) a2P2.innerHTML = t.articles.art2P2;
 
         // 9. Features Section
         const fHeading = document.getElementById('featHeading');
@@ -1000,16 +1552,73 @@ document.addEventListener('DOMContentLoaded', () => {
         if (faqA8 && t.faq.a8) faqA8.innerHTML = t.faq.a8;
 
         // 11. Footer Section
+        const fTagline = document.getElementById('footerTagline');
         const fDisc = document.getElementById('footerDisclaimer');
+        const fChip1 = document.getElementById('trustChip1');
+        const fChip2 = document.getElementById('trustChip2');
+        const fChip3 = document.getElementById('trustChip3');
+        const fColTools = document.getElementById('footColTools');
         const fReels = document.getElementById('footLinkReels');
         const fDP = document.getElementById('footLinkDP');
         const fStories = document.getElementById('footLinkStories');
+        const fHighlights = document.getElementById('footLinkHighlights');
+        const fPhotos = document.getElementById('footLinkPhotos');
+        const fColGuides = document.getElementById('footColGuides');
+        const fDevIos = document.getElementById('footDevIos');
+        const fDevAnd = document.getElementById('footDevAndroid');
+        const fDevPC = document.getElementById('footDevPC');
+        const fDevMac = document.getElementById('footDevMac');
+        const fColLegal = document.getElementById('footColLegal');
+        const fLegPriv = document.getElementById('footLegPrivacy');
+        const fLegTerms = document.getElementById('footLegTerms');
+        const fLegAbout = document.getElementById('footLegAbout');
+        const fLegCont = document.getElementById('footLegContact');
+        const fShareLbl = document.getElementById('shareBarLabel');
         const fCopy = document.getElementById('footerCopyright');
+
+        if (fTagline && t.footer.tagline) fTagline.textContent = t.footer.tagline;
         if (fDisc) fDisc.innerHTML = t.footer.disclaimer;
+        if (fChip1 && t.footer.chip1) fChip1.textContent = t.footer.chip1;
+        if (fChip2 && t.footer.chip2) fChip2.textContent = t.footer.chip2;
+        if (fChip3 && t.footer.chip3) fChip3.textContent = t.footer.chip3;
+        if (fColTools && t.footer.colTools) fColTools.textContent = t.footer.colTools;
         if (fReels) fReels.textContent = t.footer.linkReels;
         if (fDP) fDP.textContent = t.footer.linkDP;
         if (fStories) fStories.textContent = t.footer.linkStories;
+        if (fHighlights && t.footer.linkHighlights) fHighlights.textContent = t.footer.linkHighlights;
+        if (fPhotos && t.footer.linkPhotos) fPhotos.textContent = t.footer.linkPhotos;
+        if (fColGuides && t.footer.colGuides) fColGuides.textContent = t.footer.colGuides;
+        if (fDevIos && t.footer.devIos) fDevIos.textContent = t.footer.devIos;
+        if (fDevAnd && t.footer.devAndroid) fDevAnd.textContent = t.footer.devAndroid;
+        if (fDevPC && t.footer.devPC) fDevPC.textContent = t.footer.devPC;
+        if (fDevMac && t.footer.devMac) fDevMac.textContent = t.footer.devMac;
+        if (fColLegal && t.footer.colLegal) fColLegal.textContent = t.footer.colLegal;
+        if (fLegPriv && t.footer.legPrivacy) fLegPriv.textContent = t.footer.legPrivacy;
+        if (fLegTerms && t.footer.legTerms) fLegTerms.textContent = t.footer.legTerms;
+        if (fLegAbout && t.footer.legAbout) fLegAbout.textContent = t.footer.legAbout;
+        if (fLegCont && t.footer.legContact) fLegCont.textContent = t.footer.legContact;
+        if (fShareLbl && t.footer.shareLabel) fShareLbl.textContent = t.footer.shareLabel;
         if (fCopy) fCopy.innerHTML = t.footer.copyright;
+
+        // 11b. Legal Policy Modal Dialog
+        const mTabPriv = document.getElementById('modalTabPrivacy');
+        const mTabTerms = document.getElementById('modalTabTerms');
+        const mTabAbout = document.getElementById('modalTabAbout');
+        const mTabContact = document.getElementById('modalTabContact');
+        const panePriv = document.getElementById('pane-privacy');
+        const paneTerms = document.getElementById('pane-terms');
+        const paneAbout = document.getElementById('pane-about');
+        const paneContact = document.getElementById('pane-contact');
+
+        if (mTabPriv && t.legal) mTabPriv.textContent = t.legal.tabPrivacy;
+        if (mTabTerms && t.legal) mTabTerms.textContent = t.legal.tabTerms;
+        if (mTabAbout && t.legal) mTabAbout.textContent = t.legal.tabAbout;
+        if (mTabContact && t.legal) mTabContact.textContent = t.legal.tabContact;
+
+        if (panePriv && t.legal) panePriv.innerHTML = t.legal.panePrivacy;
+        if (paneTerms && t.legal) paneTerms.innerHTML = t.legal.paneTerms;
+        if (paneAbout && t.legal) paneAbout.innerHTML = t.legal.paneAbout;
+        if (paneContact && t.legal) paneContact.innerHTML = t.legal.paneContact;
 
         // 12. Persist in storage and set html lang
         document.documentElement.setAttribute('lang', lang);
@@ -1184,6 +1793,43 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Smooth Scroll Reveal Animation for all sections
+    const revealElements = document.querySelectorAll('.scroll-reveal');
+    if ('IntersectionObserver' in window) {
+        const revealObserver = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('revealed');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, {
+            root: null,
+            rootMargin: '0px 0px -40px 0px',
+            threshold: 0.08
+        });
+
+        revealElements.forEach(el => revealObserver.observe(el));
+    } else {
+        // Fallback for legacy browsers without IntersectionObserver
+        revealElements.forEach(el => el.classList.add('revealed'));
+    }
+
+    // Footer Tool Links Quick Tab Switch
+    document.querySelectorAll('.foot-tool-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            const type = link.getAttribute('data-type');
+            if (type) {
+                switchActiveTab(type, true);
+            }
+        });
+    });
+
     // Apply saved or default language on startup
     applyLanguage(currentAppLang);
+
+    // Initial Active Tab synchronization across mobile/tablet and desktop
+    const initialActive = document.querySelector('.tab-btn.active') || document.querySelector('.dock-btn.active');
+    const initialType = initialActive ? initialActive.getAttribute('data-type') : 'all';
+    switchActiveTab(initialType, false);
 });
