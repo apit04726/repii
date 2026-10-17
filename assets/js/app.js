@@ -103,11 +103,17 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlaceholder(type);
 
         if (shouldScroll) {
-            if (navigator.vibrate) {
-                try { navigator.vibrate(10); } catch(e) {}
+            const isResultShowing = resultCard && resultCard.style.display === 'block';
+            if (!isResultShowing) {
+                if (navigator.vibrate) {
+                    try { navigator.vibrate(10); } catch(e) {}
+                }
+                searchForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+                if (!isMobileOrTablet) {
+                    setTimeout(() => urlInput.focus(), 300);
+                }
             }
-            searchForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setTimeout(() => urlInput.focus(), 300);
         }
     }
 
@@ -155,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     bindTabActivation(tabBtns, false);
-    bindTabActivation(dockBtns, true);
+    bindTabActivation(dockBtns, false);
 
     function updatePlaceholder(type) {
         const langObj = (typeof i18n !== 'undefined' && i18n[currentAppLang]) ? i18n[currentAppLang] : null;
@@ -224,6 +230,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function triggerAutoSearch() {
         const val = urlInput.value.trim();
         if (!val || submitBtn.disabled) return;
+
+        if (urlInput) urlInput.blur();
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+        }
         
         lastSearchedUrl = val;
         clearBtn.style.display = 'flex';
@@ -256,7 +267,10 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.value = '';
         clearBtn.style.display = 'none';
         clearResultsAndErrors();
-        urlInput.focus();
+        const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+        if (!isMobileOrTablet) {
+            urlInput.focus();
+        }
     });
 
     // Auto-search on paste (Ctrl+V, mobile long press, clipboard suggestion)
@@ -334,9 +348,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
         lastSearchedUrl = url;
 
+        if (urlInput) urlInput.blur();
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+        }
+
         if (!url) {
             showError('Please paste a valid Instagram link.');
-            urlInput.focus();
+            const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+            if (!isMobileOrTablet) {
+                urlInput.focus();
+            }
             return;
         }
 
@@ -393,6 +415,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 6. Render Result Card
     function renderResult(data) {
+        if (urlInput) urlInput.blur();
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+        }
+
         const typeBadge = document.getElementById('resultTypeBadge');
         const authorAvatar = document.getElementById('resultAuthorAvatar');
         const authorName = document.getElementById('resultAuthorName');
@@ -443,6 +470,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoElem.className = 'media-preview-video';
                 videoElem.controls = true;
                 videoElem.playsInline = true;
+                videoElem.setAttribute('playsinline', 'true');
+                videoElem.setAttribute('webkit-playsinline', 'true');
                 videoElem.preload = 'metadata';
                 if (thumbSrc && thumbSrc !== mediaSrc) videoElem.poster = thumbSrc;
                 videoElem.src = mediaSrc;
@@ -455,6 +484,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         mediaContainer.classList.remove('is-portrait-reel');
                     }
                 });
+
+                // Prevent unwanted auto-scroll & mobile keyboard/autofill popup on video tap/play
+                const dismissLingeringFocus = () => {
+                    if (urlInput) urlInput.blur();
+                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                        document.activeElement.blur();
+                    }
+                };
+                videoElem.addEventListener('play', dismissLingeringFocus);
+                videoElem.addEventListener('click', dismissLingeringFocus);
+                videoElem.addEventListener('touchstart', dismissLingeringFocus, { passive: true });
 
                 mediaContainer.appendChild(videoElem);
             } else {
@@ -682,7 +722,10 @@ document.addEventListener('DOMContentLoaded', () => {
             clearResultsAndErrors();
             urlInput.value = '';
             clearBtn.style.display = 'none';
-            urlInput.focus();
+            const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+            if (!isMobileOrTablet) {
+                urlInput.focus();
+            }
             window.scrollTo({ top: searchForm.offsetTop - 100, behavior: 'smooth' });
         });
         downloadOptions.appendChild(resetBtn);

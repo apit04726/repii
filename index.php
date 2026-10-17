@@ -301,10 +301,18 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                                     </svg>
                                 </div>
 
-                                <input type="text" 
+                                <input type="url" 
                                        id="urlInput" 
+                                       name="instagram_url"
                                        class="search-input" 
                                        placeholder="Paste Instagram Reel, DP, Story, or Post URL..." 
+                                       autocomplete="off"
+                                       autocorrect="off"
+                                       autocapitalize="none"
+                                       spellcheck="false"
+                                       inputmode="url"
+                                       data-lpignore="true"
+                                       data-form-type="other"
                                        required>
 
                                 <button type="button" id="clearBtn" class="action-btn clear-btn" title="Clear input">

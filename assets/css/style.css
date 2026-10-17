@@ -876,6 +876,7 @@ body {
   max-width: 320px;
   margin: 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  touch-action: manipulation;
 }
 
 .media-preview-video {
@@ -886,6 +887,7 @@ body {
   object-fit: contain;
   display: block;
   background: #000000;
+  touch-action: manipulation;
 }
 
 .media-preview-img {
@@ -2755,6 +2757,7 @@ body {
   .result-card {
     border-radius: var(--radius-md);
     margin-top: 1.75rem;
+    margin-bottom: calc(var(--dock-height) + 2.5rem) !important;
   }
 
   .result-header {
