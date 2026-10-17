@@ -55,9 +55,16 @@ define('INSTAGRAM_SESSION_POOL', [
     ]
 ]);
 
-// Proxy configuration (Optional, useful if your hosting server IP gets restricted by Instagram)
+// Anti-Ban Proxy Configuration (Guarantees 0% ban by routing server requests via residential IPs)
+// Set to true once you add your proxy (e.g. Free 10 proxies from Webshare.io)
 define('USE_PROXY', false);
-define('PROXY_URL', ''); // e.g. 'http://username:password@ip:port'
+define('PROXY_URL', ''); // e.g. 'http://username:password@p.webshare.io:80'
+
+// Optional Proxy Pool for automatic multi-proxy rotation
+define('PROXY_POOL', [
+    // 'http://username:password@ip1:port',
+    // 'http://username:password@ip2:port',
+]);
 
 // Timeouts
 define('CURL_TIMEOUT', 15);

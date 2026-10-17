@@ -158,8 +158,25 @@ function make_curl_request($url, $headers = [], $post_data = null, $cookies = ''
         curl_setopt($ch, CURLOPT_POSTFIELDS, is_array($post_data) ? http_build_query($post_data) : $post_data);
     }
 
-    if (USE_PROXY && !empty(PROXY_URL)) {
-        curl_setopt($ch, CURLOPT_PROXY, PROXY_URL);
+    // Anti-Ban Proxy Routing (Supports single proxy or rotating proxy pool)
+    $proxy = '';
+    if (defined('USE_PROXY') && USE_PROXY) {
+        if (defined('PROXY_POOL') && is_array(PROXY_POOL) && !empty(PROXY_POOL)) {
+            $valid_proxies = array_values(array_filter(PROXY_POOL));
+            if (!empty($valid_proxies)) {
+                $proxy = $valid_proxies[array_rand($valid_proxies)];
+            }
+        }
+        if (empty($proxy) && defined('PROXY_URL') && !empty(PROXY_URL)) {
+            $proxy = PROXY_URL;
+        }
+    }
+
+    if (!empty($proxy)) {
+        curl_setopt($ch, CURLOPT_PROXY, $proxy);
+        if (str_starts_with($proxy, 'socks5://') || str_starts_with($proxy, 'socks5h://')) {
+            curl_setopt($ch, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME);
+        }
     }
 
     $response = curl_exec($ch);
