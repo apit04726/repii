@@ -291,7 +291,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
                 <!-- Search Form -->
                 <div class="search-card">
-                    <form id="searchForm" autocomplete="off">
+                    <form id="searchForm" role="search" action="javascript:void(0);" method="dialog" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
                         <div class="search-box-wrapper">
                             <div class="search-input-area">
                                 <div class="search-icon">
@@ -301,18 +301,22 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                                     </svg>
                                 </div>
 
-                                <input type="url" 
+                                <input type="search" 
                                        id="urlInput" 
-                                       name="instagram_url"
+                                       name="q"
                                        class="search-input" 
                                        placeholder="Paste Instagram Reel, DP, Story, or Post URL..." 
                                        autocomplete="off"
                                        autocorrect="off"
                                        autocapitalize="none"
                                        spellcheck="false"
-                                       inputmode="url"
-                                       data-lpignore="true"
+                                       inputmode="search"
+                                       enterkeyhint="search"
+                                       role="searchbox"
                                        data-form-type="other"
+                                       data-lpignore="true"
+                                       data-1p-ignore="true"
+                                       data-bwignore="true"
                                        required>
 
                                 <button type="button" id="clearBtn" class="action-btn clear-btn" title="Clear input">
