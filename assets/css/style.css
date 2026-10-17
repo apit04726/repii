@@ -876,6 +876,7 @@ body {
 .media-preview-container {
   position: relative;
   border-radius: var(--radius-md);
+  overflow: hidden;
   background: #000000;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   display: flex;
@@ -885,6 +886,7 @@ body {
   max-width: 320px;
   margin: 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  touch-action: manipulation;
 }
 
 .media-preview-video {
@@ -895,7 +897,7 @@ body {
   object-fit: contain;
   display: block;
   background: #000000;
-  border-radius: var(--radius-md);
+  touch-action: manipulation;
 }
 
 .media-preview-img {
@@ -906,268 +908,6 @@ body {
   object-fit: contain;
   display: block;
   background: #000000;
-  border-radius: var(--radius-md);
-}
-
-/* Video Preview Interactive Options Menu & 3-Dots Controllers */
-.native-dots-touch-target {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 60px;
-  height: 54px;
-  z-index: 30;
-  cursor: pointer;
-  background: transparent;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.video-options-menu {
-  position: absolute;
-  inset: auto 8px 8px 8px;
-  background: rgba(15, 23, 42, 0.96);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1.5px solid rgba(221, 42, 123, 0.35);
-  border-radius: 18px;
-  padding: 0.9rem 1rem;
-  z-index: 35;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(221, 42, 123, 0.2);
-  display: none;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-height: calc(100% - 16px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(221, 42, 123, 0.5) transparent;
-  animation: videoMenuSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.video-options-menu::-webkit-scrollbar {
-  width: 4px;
-}
-
-.video-options-menu::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.video-options-menu::-webkit-scrollbar-thumb {
-  background: rgba(221, 42, 123, 0.5);
-  border-radius: 999px;
-}
-
-.video-options-menu.active {
-  display: flex !important;
-}
-
-@keyframes videoMenuSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.video-options-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: 0.88rem;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-}
-
-.video-options-close {
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 1.3rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 6px;
-  transition: color 0.2s ease, background 0.2s ease;
-}
-
-.video-options-close:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.video-options-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.video-option-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.video-option-label {
-  font-size: 0.76rem;
-  color: #94a3b8;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.video-speed-chips {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.35rem;
-}
-
-.speed-chip {
-  min-width: 0;
-  padding: 0.38rem 0.25rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-}
-
-.speed-chip:hover {
-  background: rgba(221, 42, 123, 0.25);
-  border-color: rgba(221, 42, 123, 0.4);
-  color: #ffffff;
-}
-
-.speed-chip.active {
-  background: var(--ig-grad);
-  border-color: #dd2a7b;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(221, 42, 123, 0.4);
-}
-
-.video-option-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.video-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.55rem 0.85rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f1f5f9;
-  border-radius: 10px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.video-action-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: #ffffff;
-}
-
-.video-action-btn:active {
-  transform: scale(0.98);
-}
-
-.video-action-btn.active {
-  background: rgba(221, 42, 123, 0.2);
-  border-color: #dd2a7b;
-  color: #ff5b8a;
-}
-
-.video-action-btn.download-action-btn {
-  background: var(--ig-grad);
-  border-color: transparent;
-  color: #ffffff;
-  font-weight: 700;
-}
-
-.video-action-btn.download-action-btn:hover {
-  background: var(--ig-grad-hover);
-  box-shadow: 0 4px 14px var(--ig-glow);
-}
-
-/* Responsive Adaptive Tweaks for Mobile & Tablet */
-@media (max-width: 480px) {
-  .video-speed-chips {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .video-options-menu {
-    padding: 0.8rem 0.85rem;
-    gap: 0.65rem;
-  }
-
-  .speed-chip {
-    padding: 0.35rem 0.2rem;
-    font-size: 0.76rem;
-  }
-
-  .video-action-btn {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
-  }
-}
-
-@media (max-width: 360px) {
-  .native-dots-touch-target {
-    width: 54px;
-    height: 50px;
-  }
-
-  .video-options-menu {
-    inset: auto 4px 4px 4px;
-    padding: 0.65rem 0.75rem;
-    border-radius: 14px;
-    gap: 0.55rem;
-  }
-
-  .video-options-header {
-    font-size: 0.82rem;
-  }
-
-  .speed-chip {
-    padding: 0.3rem 0.15rem;
-    font-size: 0.72rem;
-  }
-
-  .video-action-btn {
-    padding: 0.45rem 0.65rem;
-    font-size: 0.78rem;
-  }
-}
-
-@media (min-width: 601px) and (max-width: 1024px) {
-  .native-dots-touch-target {
-    width: 64px;
-    height: 56px;
-  }
-
-  .video-options-menu {
-    inset: auto 12px 12px 12px;
-    padding: 1.1rem 1.25rem;
-    border-radius: 20px;
-  }
 }
 
 /* Profile DP Mode (Square 1:1 Aspect Ratio) */
@@ -1743,7 +1483,7 @@ body {
   .result-card.single-media-mode .media-preview-container.is-portrait-reel .media-preview-video {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
     border-radius: 18px;
   }
 
