@@ -32,12 +32,26 @@ define('INSTAGRAM_SESSION_ID', '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9j
 define('INSTAGRAM_CSRF_TOKEN', '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd');
 define('INSTAGRAM_DS_USER_ID', '22996724939');
 
-// Session Pool
+// Multi-Account Anti-Ban Session Pool (Load-Balanced)
+// Add all your active accounts here. Traffic is automatically divided equally across all accounts.
 define('INSTAGRAM_SESSION_POOL', [
     [
+        // Account 1 (Active)
         'session_id' => '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9jLNltGiJinF4pGJRiZIbM2DmDtzd2iQ',
         'csrf_token' => '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd',
         'ds_user_id' => '22996724939'
+    ],
+    [
+        // Account 2 (Paste your reactivated account credentials here)
+        'session_id' => '',
+        'csrf_token' => '',
+        'ds_user_id' => ''
+    ],
+    [
+        // Account 3 (Paste your reactivated account credentials here)
+        'session_id' => '',
+        'csrf_token' => '',
+        'ds_user_id' => ''
     ]
 ]);
 
