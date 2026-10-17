@@ -42,10 +42,10 @@ define('INSTAGRAM_SESSION_POOL', [
         'ds_user_id' => '22996724939'
     ],
     [
-        // Account 2 (Paste your reactivated account credentials here)
-        'session_id' => '',
-        'csrf_token' => '',
-        'ds_user_id' => ''
+        // Account 2 (@rohansharma00785 - Active)
+        'session_id' => '23981181226%3ASihk6KQWViz672%3A15%3AAYmxbMWDhFwvx18ic3_Zl79fnVcSpifApG1ekTKaeA',
+        'csrf_token' => 'XdOVXGN9vA3eHrUOwqxHlRTBHP5Ob0XI',
+        'ds_user_id' => '23981181226'
     ],
     [
         // Account 3 (Paste your reactivated account credentials here)
