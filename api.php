@@ -51,8 +51,37 @@ $timestamps[] = $now;
 
 require_once __DIR__ . '/config.php';
 
-// Helper response functions
-function json_success($data) {
+// Helper response functions with Smart Caching Shield
+function get_cached_media($key) {
+    $clean_key = preg_replace('/[?#].*$/', '', trim($key));
+    $cache_file = sys_get_temp_dir() . '/instago_m_' . md5($clean_key) . '.json';
+    if (file_exists($cache_file)) {
+        $mtime = @filemtime($cache_file);
+        if ($mtime && (time() - $mtime < 600)) { // 10 minutes cache
+            $content = @file_get_contents($cache_file);
+            if ($content) {
+                $decoded = json_decode($content, true);
+                if (is_array($decoded) && (!empty($decoded['download_url']) || !empty($decoded['media']))) {
+                    return $decoded;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function set_cached_media($key, $data) {
+    if (!empty($data) && is_array($data) && (!empty($data['download_url']) || !empty($data['media']))) {
+        $clean_key = preg_replace('/[?#].*$/', '', trim($key));
+        $cache_file = sys_get_temp_dir() . '/instago_m_' . md5($clean_key) . '.json';
+        @file_put_contents($cache_file, json_encode($data), LOCK_EX);
+    }
+}
+
+function json_success($data, $cache_key = null) {
+    if ($cache_key) {
+        set_cached_media($cache_key, $data);
+    }
     echo json_encode([
         'status' => 'success',
         'data' => $data
@@ -448,70 +477,8 @@ function fetch_instagram_dp($username) {
     return null;
 }
 
-// 3. Fetch Reels & Posts via Embed Scraper & Fallbacks
-function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
-    $sessions = get_instagram_session_pool();
-    $media_id = shortcode_to_media_id($shortcode);
-
-    // 1. Try each session in pool (indown.io multi-account failover)
-    foreach ($sessions as $sess) {
-        $cookies = get_session_cookies($sess);
-
-        // Engine A: Media Info API with authentic Web headers
-        if ($media_id) {
-            $mobile_api = "https://www.instagram.com/api/v1/media/{$media_id}/info/";
-            $headers = [
-                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'X-IG-App-ID: 936619743392459',
-                'X-ASBD-ID: 198387',
-                'X-IG-WWW-Claim: 0',
-                'X-Requested-With: XMLHttpRequest',
-                'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
-                'Sec-Ch-Ua: "Chromium";v="124", "Google Chrome";v="124"',
-                'Sec-Ch-Ua-Mobile: ?0',
-                'Sec-Ch-Ua-Platform: "Windows"',
-                'Sec-Fetch-Dest: empty',
-                'Sec-Fetch-Mode: cors',
-                'Sec-Fetch-Site: same-origin',
-                'Accept: */*'
-            ];
-            $m_res = make_curl_request($mobile_api, $headers, null, $cookies);
-            if ($m_res['code'] === 200 && !empty($m_res['body'])) {
-                $m_data = json_decode($m_res['body'], true);
-                $item = $m_data['items'][0] ?? null;
-                if ($item) {
-                    return parse_instagram_item($item, $shortcode);
-                }
-            }
-        }
-
-        // Engine B: GraphQL Web API
-        if (!empty($sess['session_id'])) {
-            $gql_url = "https://www.instagram.com/graphql/query";
-            $gql_headers = [
-                'X-IG-App-ID: 936619743392459',
-                'X-CSRFToken: ' . ($sess['csrf_token'] ?? ''),
-                'X-Requested-With: XMLHttpRequest',
-                'Origin: https://www.instagram.com',
-                'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
-                'Content-Type: application/x-www-form-urlencoded'
-            ];
-            $gql_data = [
-                'doc_id' => '24368985919464652',
-                'variables' => json_encode(['shortcode' => $shortcode])
-            ];
-            $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies);
-            if ($gql_res['code'] === 200 && !empty($gql_res['body'])) {
-                $gql_json = json_decode($gql_res['body'], true);
-                $media = $gql_json['data']['xdt_shortcode_media'] ?? null;
-                if ($media) {
-                    return parse_graphql_media($media, $shortcode);
-                }
-            }
-        }
-    }
-
-    // Scrape Embed HTML
+// 3. Zero-Burn Anonymous Embed Scraper (Public Reels & Posts)
+function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
     $embed_url = "https://www.instagram.com/{$url_type}/{$shortcode}/embed/captioned/";
     $res = make_curl_request($embed_url, [], null, '');
     if ($res['code'] === 200 && !empty($res['body'])) {
@@ -593,6 +560,77 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
                     ]
                 ]
             ];
+        }
+    }
+    return null;
+}
+
+// 4. Fetch Reels & Posts with Zero-Burn Priority & Multi-Account Fallbacks
+function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
+    // Stage 1: Zero-Burn Anonymous Scraper (Protects all dummy accounts from suspension)
+    $embed_res = fetch_via_embed_scraper($shortcode, $url_type);
+    if ($embed_res) {
+        return $embed_res;
+    }
+
+    // Stage 2: Fallback to Multi-Account Session Pool (Used only when login/carousel is required)
+    $sessions = get_instagram_session_pool();
+    $media_id = shortcode_to_media_id($shortcode);
+
+    foreach ($sessions as $sess) {
+        $cookies = get_session_cookies($sess);
+
+        // Engine A: Media Info API with authentic Web headers
+        if ($media_id) {
+            $mobile_api = "https://www.instagram.com/api/v1/media/{$media_id}/info/";
+            $headers = [
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'X-IG-App-ID: 936619743392459',
+                'X-ASBD-ID: 198387',
+                'X-IG-WWW-Claim: 0',
+                'X-Requested-With: XMLHttpRequest',
+                'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
+                'Sec-Ch-Ua: "Chromium";v="124", "Google Chrome";v="124"',
+                'Sec-Ch-Ua-Mobile: ?0',
+                'Sec-Ch-Ua-Platform: "Windows"',
+                'Sec-Fetch-Dest: empty',
+                'Sec-Fetch-Mode: cors',
+                'Sec-Fetch-Site: same-origin',
+                'Accept: */*'
+            ];
+            $m_res = make_curl_request($mobile_api, $headers, null, $cookies);
+            if ($m_res['code'] === 200 && !empty($m_res['body'])) {
+                $m_data = json_decode($m_res['body'], true);
+                $item = $m_data['items'][0] ?? null;
+                if ($item) {
+                    return parse_instagram_item($item, $shortcode);
+                }
+            }
+        }
+
+        // Engine B: GraphQL Web API
+        if (!empty($sess['session_id'])) {
+            $gql_url = "https://www.instagram.com/graphql/query";
+            $gql_headers = [
+                'X-IG-App-ID: 936619743392459',
+                'X-CSRFToken: ' . ($sess['csrf_token'] ?? ''),
+                'X-Requested-With: XMLHttpRequest',
+                'Origin: https://www.instagram.com',
+                'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
+                'Content-Type: application/x-www-form-urlencoded'
+            ];
+            $gql_data = [
+                'doc_id' => '24368985919464652',
+                'variables' => json_encode(['shortcode' => $shortcode])
+            ];
+            $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies);
+            if ($gql_res['code'] === 200 && !empty($gql_res['body'])) {
+                $gql_json = json_decode($gql_res['body'], true);
+                $media = $gql_json['data']['xdt_shortcode_media'] ?? null;
+                if ($media) {
+                    return parse_graphql_media($media, $shortcode);
+                }
+            }
         }
     }
 
@@ -916,6 +954,9 @@ function parse_story_items($items, $username) {
 }
 
 // --- MAIN REQUEST HANDLER ---
+if (defined('INSTAGO_API_NO_DISPATCH')) {
+    return;
+}
 $raw_input = file_get_contents('php://input');
 $post = $_POST;
 
@@ -932,6 +973,13 @@ if (empty($input_url)) {
     json_fail('Please provide a valid Instagram URL or Username.');
 }
 
+// 0. High-Speed Shield Cache (10-Minute Instant Response, Saves Accounts & Proxy Bandwidth)
+$cache_key = preg_replace('/[?#].*$/', '', $input_url);
+$cached_data = get_cached_media($cache_key);
+if ($cached_data) {
+    json_success($cached_data);
+}
+
 // Auto-detect input type
 // 1. Stories & Highlights: instagram.com/stories/username/12345 or /stories/highlights/12345
 if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-]+)(?:\/([0-9]+))?)/i', $input_url, $m)) {
@@ -943,10 +991,10 @@ if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-
         $story_id = $m[3] ?? null;
     }
     $res = fetch_instagram_story($username, $story_id);
-    if ($res) json_success($res);
+    if ($res) json_success($res, $cache_key);
 
     $rapid = fetch_via_rapidapi($input_url);
-    if ($rapid) json_success($rapid);
+    if ($rapid) json_success($rapid, $cache_key);
 
     json_fail('Story or Highlight not found or the account is private.');
 }
@@ -976,10 +1024,10 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
     }
     if ($highlight_id) {
         $res = fetch_instagram_story('highlights', $highlight_id);
-        if ($res) json_success($res);
+        if ($res) json_success($res, $cache_key);
     }
     $rapid = fetch_via_rapidapi($input_url);
-    if ($rapid) json_success($rapid);
+    if ($rapid) json_success($rapid, $cache_key);
 
     json_fail('Highlight not found or the account is private.');
 }
@@ -988,10 +1036,10 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
 if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
     $shortcode = $m[1];
     $rapid = fetch_via_rapidapi($input_url);
-    if ($rapid) json_success($rapid);
+    if ($rapid) json_success($rapid, $cache_key);
 
     $result = fetch_instagram_reel_or_post($shortcode, 'reel');
-    if ($result) json_success($result);
+    if ($result) json_success($result, $cache_key);
 
     json_fail('Unable to fetch this Reel. Please make sure the post or account is public.', 404);
 }
@@ -1000,10 +1048,10 @@ if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url
 if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
     $shortcode = $m[1];
     $rapid = fetch_via_rapidapi($input_url);
-    if ($rapid) json_success($rapid);
+    if ($rapid) json_success($rapid, $cache_key);
 
     $result = fetch_instagram_reel_or_post($shortcode, 'p');
-    if ($result) json_success($result);
+    if ($result) json_success($result, $cache_key);
 
     json_fail('Unable to download this post. Please make sure the post is public.', 404);
 }
@@ -1016,11 +1064,11 @@ if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $input_url, $m) ||
     if (!in_array(strtolower($username), ['explore', 'reels', 'stories', 'direct', 'accounts', 'developer', 'about', 'legal'])) {
         if (!empty(RAPIDAPI_KEY)) {
             $rapid_dp = fetch_via_rapidapi("https://www.instagram.com/{$username}/");
-            if ($rapid_dp) json_success($rapid_dp);
+            if ($rapid_dp) json_success($rapid_dp, $cache_key);
         }
 
         $dp_res = fetch_instagram_dp($username);
-        if ($dp_res) json_success($dp_res);
+        if ($dp_res) json_success($dp_res, $cache_key);
 
         json_fail('Profile not found or user does not exist (@' . htmlspecialchars($username) . ').', 404);
     }
