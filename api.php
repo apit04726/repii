@@ -4,6 +4,9 @@
  * Handles media fetching for Instagram Reels, Posts, DP, and Stories
  */
 
+error_reporting(0);
+ini_set('display_errors', '0');
+
 header('Content-Type: application/json; charset=UTF-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -325,11 +328,15 @@ function fetch_instagram_dp($username) {
             }
         }
 
-        // 2. Try mobile search API (highly reliable, returns DP even when web profile info is rate-limited)
-        $search_url = "https://i.instagram.com/api/v1/users/search/?q=" . urlencode($username);
+        // 2. Try web search API (highly reliable, returns DP even when web profile info is rate-limited)
+        $search_url = "https://www.instagram.com/api/v1/web/search/topsearch/?query=" . urlencode($username);
         $m_headers = [
-            'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'X-IG-App-ID: 936619743392459',
+            'X-ASBD-ID: 198387',
+            'X-IG-WWW-Claim: 0',
+            'X-Requested-With: XMLHttpRequest',
+            'Referer: https://www.instagram.com/' . urlencode($username) . '/',
             'Accept-Language: en-US,en;q=0.9',
             'Accept: */*'
         ];
@@ -414,13 +421,22 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
     foreach ($sessions as $sess) {
         $cookies = get_session_cookies($sess);
 
-        // Engine A: Mobile App Media Info API
+        // Engine A: Media Info API with authentic Web headers
         if ($media_id) {
-            $mobile_api = "https://i.instagram.com/api/v1/media/{$media_id}/info/";
+            $mobile_api = "https://www.instagram.com/api/v1/media/{$media_id}/info/";
             $headers = [
-                'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 'X-IG-App-ID: 936619743392459',
-                'Accept-Language: en-US,en;q=0.9',
+                'X-ASBD-ID: 198387',
+                'X-IG-WWW-Claim: 0',
+                'X-Requested-With: XMLHttpRequest',
+                'Referer: https://www.instagram.com/reel/' . $shortcode . '/',
+                'Sec-Ch-Ua: "Chromium";v="124", "Google Chrome";v="124"',
+                'Sec-Ch-Ua-Mobile: ?0',
+                'Sec-Ch-Ua-Platform: "Windows"',
+                'Sec-Fetch-Dest: empty',
+                'Sec-Fetch-Mode: cors',
+                'Sec-Fetch-Site: same-origin',
                 'Accept: */*'
             ];
             $m_res = make_curl_request($mobile_api, $headers, null, $cookies);
@@ -461,7 +477,7 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
 
     // Scrape Embed HTML
     $embed_url = "https://www.instagram.com/{$url_type}/{$shortcode}/embed/captioned/";
-    $res = make_curl_request($embed_url, [], null, $cookies);
+    $res = make_curl_request($embed_url, [], null, '');
     if ($res['code'] === 200 && !empty($res['body'])) {
         $html = $res['body'];
         
@@ -694,8 +710,12 @@ function fetch_instagram_story($username, $story_id = null) {
     }
     
     $mobile_headers = [
-        'User-Agent: Instagram 278.0.0.19.115 Android (30/11; 480dpi; 1080x2176; Xiaomi; Redmi Note 9S; curtrana; qcom; en_US)',
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'X-IG-App-ID: 936619743392459',
+        'X-ASBD-ID: 198387',
+        'X-IG-WWW-Claim: 0',
+        'X-Requested-With: XMLHttpRequest',
+        'Referer: https://www.instagram.com/',
         'Accept-Language: en-US,en;q=0.9',
         'Accept: */*'
     ];
@@ -937,32 +957,6 @@ if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url
     $result = fetch_instagram_reel_or_post($shortcode, 'reel');
     if ($result) json_success($result);
 
-    // If scraper got rate-limited by Instagram on local IP and no API key is set, provide functional demo preview
-    if (empty(RAPIDAPI_KEY) && empty(INSTAGRAM_SESSION_ID)) {
-        json_success([
-            'type' => 'reel',
-            'shortcode' => $shortcode,
-            'author' => 'Instagram Reel Creator',
-            'caption' => '✨ Beautiful Instagram Reel (Ready to Download) — Note: To enable unlimited live fetching from any server, add your free RAPIDAPI_KEY or Instagram SESSION_ID in config.php.',
-            'thumbnail' => 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-            'download_url' => 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-            'media' => [
-                [
-                    'type' => 'video',
-                    'quality' => 'HD 1080p (MP4)',
-                    'url' => 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-                    'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode('https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4')
-                ],
-                [
-                    'type' => 'image',
-                    'quality' => 'Cover Thumbnail (HD)',
-                    'url' => 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-                    'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80')
-                ]
-            ]
-        ]);
-    }
-
     json_fail('Unable to fetch this Reel. Please make sure the post or account is public.', 404);
 }
 
@@ -975,25 +969,6 @@ if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $input_url, $m))
     $result = fetch_instagram_reel_or_post($shortcode, 'p');
     if ($result) json_success($result);
 
-    if (empty(RAPIDAPI_KEY) && empty(INSTAGRAM_SESSION_ID)) {
-        json_success([
-            'type' => 'post',
-            'shortcode' => $shortcode,
-            'author' => 'Instagram Creator',
-            'caption' => '📸 Instagram Photo (Full HD Original Quality) — Ready to Download.',
-            'thumbnail' => 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
-            'download_url' => 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
-            'media' => [
-                [
-                    'type' => 'image',
-                    'quality' => 'Original HD Photo (JPG)',
-                    'url' => 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80',
-                    'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode('https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=800&q=80')
-                ]
-            ]
-        ]);
-    }
-
     json_fail('Unable to download this post. Please make sure the post is public.', 404);
 }
 
@@ -1003,34 +978,13 @@ if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $input_url, $m) ||
     $username = $m[1];
     // Ignore reserved paths
     if (!in_array(strtolower($username), ['explore', 'reels', 'stories', 'direct', 'accounts', 'developer', 'about', 'legal'])) {
+        if (!empty(RAPIDAPI_KEY)) {
+            $rapid_dp = fetch_via_rapidapi("https://www.instagram.com/{$username}/");
+            if ($rapid_dp) json_success($rapid_dp);
+        }
+
         $dp_res = fetch_instagram_dp($username);
         if ($dp_res) json_success($dp_res);
-
-        if (empty(RAPIDAPI_KEY) && empty(INSTAGRAM_SESSION_ID)) {
-            $demo_dp = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80';
-            json_success([
-                'type' => 'dp',
-                'username' => $username,
-                'full_name' => ucwords(str_replace('.', ' ', $username)),
-                'biography' => 'Instagram Profile • Full HD Profile Picture Downloader',
-                'followers' => '1.2M',
-                'following' => '450',
-                'posts_count' => '120',
-                'thumbnail' => $demo_dp,
-                'preview_url' => $demo_dp,
-                'download_url' => $demo_dp,
-                'media' => [
-                    [
-                        'type' => 'image',
-                        'quality' => 'Full HD Profile Picture (1080p)',
-                        'url' => $demo_dp,
-                        'thumbnail' => $demo_dp,
-                        'preview_url' => $demo_dp,
-                        'proxy_url' => 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($demo_dp)
-                    ]
-                ]
-            ]);
-        }
 
         json_fail('Profile not found or user does not exist (@' . htmlspecialchars($username) . ').', 404);
     }
