@@ -2053,4 +2053,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initMobileAutoScrollers();
+
+    // Auto-hide bottom mobile dock when virtual keyboard opens or input is focused
+    function initMobileKeyboardDockHandler() {
+        const isMobileOrTablet = () => window.innerWidth <= 1024 || ('ontouchstart' in window);
+
+        const onFocusIn = (e) => {
+            if (!isMobileOrTablet()) return;
+            const target = e.target;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+                document.body.classList.add('keyboard-open');
+            }
+        };
+
+        const onFocusOut = () => {
+            setTimeout(() => {
+                const active = document.activeElement;
+                if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) {
+                    document.body.classList.remove('keyboard-open');
+                }
+            }, 100);
+        };
+
+        document.addEventListener('focusin', onFocusIn);
+        document.addEventListener('focusout', onFocusOut);
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => {
+                if (!isMobileOrTablet()) return;
+                const currentHeight = window.visualViewport.height;
+                if (window.innerHeight - currentHeight > 120) {
+                    document.body.classList.add('keyboard-open');
+                } else {
+                    const active = document.activeElement;
+                    if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) {
+                        document.body.classList.remove('keyboard-open');
+                    }
+                }
+            });
+        }
+    }
+
+    initMobileKeyboardDockHandler();
 });

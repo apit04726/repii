@@ -2409,6 +2409,14 @@ body {
   box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.08);
 }
 
+/* Hide bottom mobile dock whenever virtual keyboard is open or user is typing */
+body.keyboard-open .mobile-app-dock {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  transform: translateY(120%) !important;
+}
+
 .dock-btn {
   flex: 1;
   min-width: 0;
