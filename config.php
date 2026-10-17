@@ -56,14 +56,21 @@ define('INSTAGRAM_SESSION_POOL', [
 ]);
 
 // Anti-Ban Proxy Configuration (Guarantees 0% ban by routing server requests via residential IPs)
-// Set to true once you add your proxy (e.g. Free 10 proxies from Webshare.io)
-define('USE_PROXY', false);
-define('PROXY_URL', ''); // e.g. 'http://username:password@p.webshare.io:80'
+define('USE_PROXY', true);
+define('PROXY_URL', 'http://uokhrcxp:hya18iybqf4v@45.38.107.97:6014');
 
-// Optional Proxy Pool for automatic multi-proxy rotation
+// 10-Proxy Pool for automatic multi-proxy rotation across UK, US, ES, DE, PL
 define('PROXY_POOL', [
-    // 'http://username:password@ip1:port',
-    // 'http://username:password@ip2:port',
+    'http://uokhrcxp:hya18iybqf4v@45.38.107.97:6014',
+    'http://uokhrcxp:hya18iybqf4v@64.137.96.74:6641',
+    'http://uokhrcxp:hya18iybqf4v@198.23.243.226:6361',
+    'http://uokhrcxp:hya18iybqf4v@38.154.185.97:6370',
+    'http://uokhrcxp:hya18iybqf4v@84.247.60.125:6095',
+    'http://uokhrcxp:hya18iybqf4v@191.96.254.138:6185',
+    'http://uokhrcxp:hya18iybqf4v@198.46.161.42:5092',
+    'http://uokhrcxp:hya18iybqf4v@64.137.10.153:5803',
+    'http://uokhrcxp:hya18iybqf4v@104.164.49.38:7693',
+    'http://uokhrcxp:hya18iybqf4v@23.26.71.145:5628',
 ]);
 
 // Timeouts
