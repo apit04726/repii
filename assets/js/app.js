@@ -644,7 +644,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dlBtn = document.createElement('a');
                 dlBtn.href = m.proxy_url || m.url;
                 dlBtn.className = 'media-item-dl-btn';
-                dlBtn.setAttribute('download', '');
+                const itemExt = (m.type === 'video' ? '.mp4' : '.jpg');
+                const itemFileName = 'InstaGo_' + (m.title ? m.title.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Item_' + (index + 1)) + itemExt;
+                dlBtn.setAttribute('download', itemFileName);
+                dlBtn.setAttribute('target', '_blank');
                 dlBtn.setAttribute('rel', 'nofollow noreferrer');
                 const dlBtnFull = m.type === 'video' ? 'Download MP4' : 'Download JPG';
                 const dlBtnMid = 'Download';
@@ -703,7 +706,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const btn = document.createElement('a');
             btn.href = singleItem.proxy_url || singleItem.url || data.download_url;
             btn.className = 'btn-download-main';
-            btn.setAttribute('download', '');
+            const fileExt = (singleItem.type === 'video' ? '.mp4' : '.jpg');
+            const mainFileName = 'InstaGo_' + (data.shortcode || data.username || 'Media') + fileExt;
+            btn.setAttribute('download', mainFileName);
+            btn.setAttribute('target', '_blank');
             btn.setAttribute('rel', 'nofollow noreferrer');
             const iconSvg = singleItem.type === 'video' 
                 ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
