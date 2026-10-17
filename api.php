@@ -530,7 +530,7 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
                         'type' => 'video',
                         'quality' => 'HD 1080p / MP4',
                         'url' => $best_video,
-                        'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($best_video)
+                        'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . ($thumbnail ? '&thumb=' . urlencode(base64_encode($thumbnail)) : '') . '&url=' . base64_encode($best_video)
                     ],
                     [
                         'type' => 'image',
@@ -659,7 +659,7 @@ function parse_instagram_item($item, $shortcode) {
                     'title' => "Slide #{$num}",
                     'thumbnail' => $c_thumb ?: $c_url,
                     'url' => $c_url,
-                    'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
+                    'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . ($c_thumb ? '&thumb=' . urlencode(base64_encode($c_thumb)) : '') . '&url=' . base64_encode($c_url)
                 ];
             } else if (!empty($c_item['image_versions2']['candidates'])) {
                 $c_url = $c_item['image_versions2']['candidates'][0]['url'];
@@ -682,7 +682,7 @@ function parse_instagram_item($item, $shortcode) {
                 'quality' => 'Full HD 1080p (MP4)',
                 'thumbnail' => $thumbnail,
                 'url' => $video_url,
-                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($video_url)
+                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . ($thumbnail ? '&thumb=' . urlencode(base64_encode($thumbnail)) : '') . '&url=' . base64_encode($video_url)
             ];
         } else if (!empty($thumbnail)) {
             $media_list[] = [
@@ -730,7 +730,7 @@ function parse_graphql_media($media, $shortcode) {
                     'title' => "Slide #{$num}",
                     'thumbnail' => $thumb ?: $c_url,
                     'url' => $c_url,
-                    'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . '&url=' . base64_encode($c_url)
+                    'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$shortcode}_part{$num}") . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($c_url)
                 ];
             } else if (!empty($node['display_url'])) {
                 $c_url = $node['display_url'];
@@ -752,7 +752,7 @@ function parse_graphql_media($media, $shortcode) {
                 'quality' => 'Full HD 1080p (MP4)',
                 'thumbnail' => $thumbnail,
                 'url' => $video_url,
-                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($video_url)
+                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . ($thumbnail ? '&thumb=' . urlencode(base64_encode($thumbnail)) : '') . '&url=' . base64_encode($video_url)
             ];
         } else if (!empty($thumbnail)) {
             $media_list[] = [

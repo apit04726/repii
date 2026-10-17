@@ -545,6 +545,48 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Helper to construct secure 5-second countdown gateway URL
+        function buildGatewayDownloadUrl(item, fallbackName, defaultType, thumbFallback) {
+            let targetUrl = item.proxy_url || item.url || item.download_url || '';
+            const mediaType = item.type || defaultType || 'video';
+            const cleanName = (item.title || fallbackName || 'InstaGo_Media').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const thumb = item.thumbnail || item.preview_url || thumbFallback || (mediaType === 'image' ? targetUrl : '');
+
+            const curLang = localStorage.getItem('instago_app_lang') || 'gu';
+
+            if (targetUrl && targetUrl.includes('download.php')) {
+                let sep = targetUrl.includes('?') ? '&' : '?';
+                if (!targetUrl.includes('name=') && cleanName) {
+                    targetUrl += sep + 'name=' + encodeURIComponent(cleanName);
+                    sep = '&';
+                }
+                if (!targetUrl.includes('thumb=') && thumb) {
+                    try {
+                        targetUrl += sep + 'thumb=' + encodeURIComponent(btoa(unescape(encodeURIComponent(thumb))));
+                        sep = '&';
+                    } catch(e) {}
+                }
+                if (!targetUrl.includes('lang=') && curLang) {
+                    targetUrl += sep + 'lang=' + encodeURIComponent(curLang);
+                }
+                return targetUrl;
+            }
+
+            if (targetUrl) {
+                try {
+                    const b64 = btoa(unescape(encodeURIComponent(targetUrl)));
+                    let url = `download.php?type=${encodeURIComponent(mediaType)}&name=${encodeURIComponent(cleanName)}&lang=${encodeURIComponent(curLang)}&url=${encodeURIComponent(b64)}`;
+                    if (thumb) {
+                        url += `&thumb=${encodeURIComponent(btoa(unescape(encodeURIComponent(thumb))))}`;
+                    }
+                    return url;
+                } catch(e) {
+                    return targetUrl;
+                }
+            }
+            return targetUrl;
+        }
+
         const resultCard = document.getElementById('resultCard');
         const reelQuickSpecs = document.getElementById('reelQuickSpecs');
         const specRes = document.getElementById('specRes');
@@ -640,15 +682,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 info.appendChild(quality);
                 info.appendChild(nowPlaying);
 
-                // Direct Download Action Button
+                // Direct Download Action Button (Opens in New Tab with 5-Second Countdown Gateway)
                 const dlBtn = document.createElement('a');
-                dlBtn.href = m.proxy_url || m.url;
+                dlBtn.href = buildGatewayDownloadUrl(m, 'Item_' + (index + 1), m.type, m.thumbnail);
                 dlBtn.className = 'media-item-dl-btn';
-                const itemExt = (m.type === 'video' ? '.mp4' : '.jpg');
-                const itemFileName = 'InstaGo_' + (m.title ? m.title.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Item_' + (index + 1)) + itemExt;
-                dlBtn.setAttribute('download', itemFileName);
                 dlBtn.setAttribute('target', '_blank');
-                dlBtn.setAttribute('rel', 'nofollow noreferrer');
+                dlBtn.setAttribute('rel', 'noopener noreferrer');
                 const dlBtnFull = m.type === 'video' ? 'Download MP4' : 'Download JPG';
                 const dlBtnMid = 'Download';
                 const dlBtnShort = m.type === 'video' ? 'MP4' : 'JPG';
@@ -704,13 +743,10 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPreviewItem(singleItem);
 
             const btn = document.createElement('a');
-            btn.href = singleItem.proxy_url || singleItem.url || data.download_url;
+            btn.href = buildGatewayDownloadUrl(singleItem, data.shortcode || data.username || 'Media', singleItem.type, singleItem.thumbnail || data.thumbnail);
             btn.className = 'btn-download-main';
-            const fileExt = (singleItem.type === 'video' ? '.mp4' : '.jpg');
-            const mainFileName = 'InstaGo_' + (data.shortcode || data.username || 'Media') + fileExt;
-            btn.setAttribute('download', mainFileName);
             btn.setAttribute('target', '_blank');
-            btn.setAttribute('rel', 'nofollow noreferrer');
+            btn.setAttribute('rel', 'noopener noreferrer');
             const iconSvg = singleItem.type === 'video' 
                 ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
                 : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
