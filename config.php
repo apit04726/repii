@@ -48,10 +48,10 @@ define('INSTAGRAM_SESSION_POOL', [
         'ds_user_id' => '23981181226'
     ],
     [
-        // Account 3 (Paste your reactivated account credentials here)
-        'session_id' => '',
-        'csrf_token' => '',
-        'ds_user_id' => ''
+        // Account 3 (@ronnyshahh - Active)
+        'session_id' => '38251868688%3AjsG1EruCk9csaH%3A17%3AAYlnvEYrGwwDzEm0TW_icQjlXMJEtNuHKvP_6990Bg',
+        'csrf_token' => 'IP37ix6gu5BUagHLXFHgE3FF7kGOBuZQ',
+        'ds_user_id' => '38251868688'
     ]
 ]);
 
