@@ -876,7 +876,6 @@ body {
 .media-preview-container {
   position: relative;
   border-radius: var(--radius-md);
-  overflow: hidden;
   background: #000000;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
   display: flex;
@@ -886,7 +885,6 @@ body {
   max-width: 320px;
   margin: 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  touch-action: manipulation;
 }
 
 .media-preview-video {
@@ -897,7 +895,7 @@ body {
   object-fit: contain;
   display: block;
   background: #000000;
-  touch-action: manipulation;
+  border-radius: var(--radius-md);
 }
 
 .media-preview-img {
@@ -908,6 +906,7 @@ body {
   object-fit: contain;
   display: block;
   background: #000000;
+  border-radius: var(--radius-md);
 }
 
 /* Profile DP Mode (Square 1:1 Aspect Ratio) */

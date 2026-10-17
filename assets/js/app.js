@@ -485,16 +485,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
-                // Prevent unwanted auto-scroll & mobile keyboard/autofill popup on video tap/play
-                const dismissLingeringFocus = () => {
-                    if (urlInput) urlInput.blur();
-                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
-                        document.activeElement.blur();
+                // Ensure urlInput is blurred if video starts playing
+                videoElem.addEventListener('play', () => {
+                    if (urlInput && document.activeElement === urlInput) {
+                        urlInput.blur();
                     }
-                };
-                videoElem.addEventListener('play', dismissLingeringFocus);
-                videoElem.addEventListener('click', dismissLingeringFocus);
-                videoElem.addEventListener('touchstart', dismissLingeringFocus, { passive: true });
+                });
 
                 mediaContainer.appendChild(videoElem);
             } else {
