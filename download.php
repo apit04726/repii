@@ -169,34 +169,68 @@ if (isset($_GET['direct']) && $_GET['direct'] == '1') {
         ob_end_clean();
     }
 
-    header('Content-Description: File Transfer');
-    header('Content-Type: application/octet-stream');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Transfer-Encoding: binary');
-    header('Expires: 0');
-    header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-    header('Pragma: public');
-
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 12);
     curl_setopt($ch, CURLOPT_TIMEOUT, 90);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
     curl_setopt($ch, CURLOPT_REFERER, 'https://www.instagram.com/');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
 
-    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header_line) {
-        if (stripos($header_line, 'content-length:') === 0) {
+    $headers_sent = false;
+    $status_ok = false;
+
+    // Only send download attachment headers when a valid 200/206 status is confirmed from CDN
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header_line) use (&$headers_sent, &$status_ok, $filename, $mime) {
+        $len = strlen($header_line);
+        if (preg_match('/^HTTP\/[0-9.]+\s+([0-9]{3})/i', $header_line, $m)) {
+            $code = (int)$m[1];
+            if ($code >= 200 && $code < 300) {
+                $status_ok = true;
+            }
+        }
+        $status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        if (($status_ok || ($status >= 200 && $status < 300)) && !$headers_sent) {
+            header('Content-Description: File Transfer');
+            header('Content-Type: ' . $mime);
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            header('Content-Transfer-Encoding: binary');
+            header('Expires: 0');
+            header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+            header('Pragma: public');
+            $headers_sent = true;
+        }
+        if ($headers_sent && stripos($header_line, 'content-length:') === 0) {
             header($header_line);
         }
-        return strlen($header_line);
+        return $len;
+    });
+
+    // Stream binary chunks directly and flush output to browser to prevent connection hanging
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($curl, $data) use (&$headers_sent) {
+        $status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        if ($status >= 200 && $status < 300) {
+            echo $data;
+            if (ob_get_level()) {
+                ob_flush();
+            }
+            flush();
+            return strlen($data);
+        }
+        return strlen($data);
     });
 
     curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+
+    // If streaming failed or CDN returned error/403, fallback to direct browser redirect to CDN
+    if (!$headers_sent || $http_code >= 400) {
+        header('Location: ' . $url);
+        exit;
+    }
     exit;
 }
 
@@ -1386,6 +1420,7 @@ $L = $php_i18n[$initial_lang];
             const mediaType = <?= json_encode($type) ?>;
             const directUrl = <?= json_encode($direct_download_url) ?>;
             const fileName = <?= json_encode($filename) ?>;
+            const rawMediaUrl = <?= json_encode($url) ?>;
 
             // DOM Elements
             const timerRing = document.getElementById('timerRing');
@@ -1427,18 +1462,33 @@ $L = $php_i18n[$initial_lang];
                 updateStatusStep(sec);
             }
 
-            // Single Download Trigger Helper
+            // High-Speed Direct Downloader with Single Guaranteed Execution
+            let downloadFired = false;
             function executeFileDownload() {
-                try {
-                    const dlLink = document.createElement('a');
-                    dlLink.href = directUrl;
-                    dlLink.setAttribute('download', fileName);
-                    dlLink.style.display = 'none';
-                    document.body.appendChild(dlLink);
-                    dlLink.click();
-                    setTimeout(() => { dlLink.remove(); }, 1000);
-                } catch(e) {
+                if (downloadFired) return;
+                downloadFired = true;
+
+                const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) 
+                    || ('ontouchstart' in window) 
+                    || (navigator.maxTouchPoints > 0)
+                    || (window.innerWidth <= 1024);
+
+                if (isMobileOrTablet) {
+                    // Mobile & Tablet: Single clean direct navigation (triggers native Android/iOS download manager exactly once)
                     window.location.href = directUrl;
+                } else {
+                    // Desktop: Clean anchor download with directUrl
+                    try {
+                        const dlLink = document.createElement('a');
+                        dlLink.href = directUrl;
+                        dlLink.setAttribute('download', fileName);
+                        dlLink.style.display = 'none';
+                        document.body.appendChild(dlLink);
+                        dlLink.click();
+                        setTimeout(() => { dlLink.remove(); }, 1500);
+                    } catch(e) {
+                        window.location.href = directUrl;
+                    }
                 }
             }
 
@@ -1544,19 +1594,12 @@ $L = $php_i18n[$initial_lang];
             // Manual Download Button Handlers
             downloadBtn.addEventListener('click', function(e) {
                 e.preventDefault();
-                if (!downloadTriggered) {
-                    triggerAutoDownload();
-                } else {
-                    executeFileDownload();
-                }
+                downloadFired = false;
+                executeFileDownload();
             });
 
             manualTriggerLink.addEventListener('click', function(e) {
-                e.preventDefault();
-                executeFileDownload();
-                if (!downloadTriggered) {
-                    triggerAutoDownload();
-                }
+                downloadFired = false;
             });
 
         })();

@@ -63,6 +63,11 @@ function get_cached_media($key) {
             $content = @file_get_contents($cache_file);
             if ($content) {
                 $decoded = json_decode($content, true);
+                // Sanity check: Invalidate and purge if a Reel URL was improperly cached as a photo post or has no valid video
+                if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $clean_key) && (($decoded['type'] ?? '') !== 'reel' || empty($decoded['download_url']) || strpos($decoded['download_url'], '.mp4') === false)) {
+                    @unlink($cache_file);
+                    return null;
+                }
                 if (is_array($decoded) && (!empty($decoded['download_url']) || !empty($decoded['media']))) {
                     return $decoded;
                 }
@@ -74,6 +79,10 @@ function get_cached_media($key) {
 
 function set_cached_media($key, $data) {
     if (!empty($data) && is_array($data) && (!empty($data['download_url']) || !empty($data['media']))) {
+        // Guard: Never cache a photo post or missing video for a reel URL
+        if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $key) && (($data['type'] ?? '') !== 'reel' || empty($data['download_url']) || strpos($data['download_url'], '.mp4') === false)) {
+            return;
+        }
         $clean_key = preg_replace('/[?#].*$/', '', trim($key));
         $cache_file = sys_get_temp_dir() . '/instago_m_' . md5($clean_key) . '.json';
         @file_put_contents($cache_file, json_encode($data), LOCK_EX);
@@ -615,19 +624,9 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
                     'type' => 'video',
                     'quality' => $label,
                     'title' => (count($video_urls) > 1) ? "Slide #{$num}" : "HD Video",
-                    'thumbnail' => $thumbnail,
+                    'thumbnail' => $thumbnail ?: $v_item,
                     'url' => $v_item,
                     'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode . ($num > 1 ? '_part' . $num : '')) . ($thumbnail ? '&thumb=' . urlencode(base64_encode($thumbnail)) : '') . '&url=' . base64_encode($v_item)
-                ];
-            }
-            if ($thumbnail) {
-                $media_list[] = [
-                    'type' => 'image',
-                    'quality' => 'Thumbnail HD (JPG)',
-                    'title' => 'Cover Photo',
-                    'thumbnail' => $thumbnail,
-                    'url' => $thumbnail,
-                    'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode($thumbnail)
                 ];
             }
 
@@ -644,6 +643,12 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
 
         // If photo post
         if (!empty($thumbnail)) {
+            // CRITICAL FIX: If requested as reel, NEVER return a photo post!
+            // Returning null allows Stage 2 (Session Pool Mobile API) to fetch the real 1080p MP4!
+            if ($url_type === 'reel') {
+                return null;
+            }
+
             return [
                 'type' => 'post',
                 'shortcode' => $shortcode,
@@ -672,7 +677,11 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
     // Stage 1: Zero-Burn Anonymous Scraper (Protects all dummy accounts from suspension)
     $embed_res = fetch_via_embed_scraper($shortcode, $url_type);
     if ($embed_res) {
-        return $embed_res;
+        if ($url_type === 'reel' && ($embed_res['type'] !== 'reel' || empty($embed_res['download_url']) || strpos($embed_res['download_url'], '.mp4') === false)) {
+            // Discard: Reel requested, but embed result has no valid MP4 video. Proceed to Stage 2!
+        } else {
+            return $embed_res;
+        }
     }
 
     // Stage 2: Fallback to Multi-Account Session Pool (Used only when login/carousel is required)

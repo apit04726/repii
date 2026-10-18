@@ -624,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const reelQuickSpecs = document.getElementById('reelQuickSpecs');
         const specRes = document.getElementById('specRes');
 
-        if (data.media && data.media.length > 1) {
+        if (data.media && (data.media.length > 1 || data.type === 'highlight' || data.type === 'story')) {
             // 1. Multi-Media Mode: Interactive Smart Gallery (Highlights / Stories / Carousel)
             if (resultCard) {
                 resultCard.classList.remove('single-media-mode');
