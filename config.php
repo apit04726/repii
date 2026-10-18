@@ -34,33 +34,42 @@ define('INSTAGRAM_DS_USER_ID', '22996724939');
 
 // Multi-Account Anti-Ban Session Pool (Load-Balanced)
 // Add all your active accounts here. Traffic is automatically divided equally across all accounts.
+// Each Instagram account is permanently bound to its own dedicated Webshare proxy account.
 define('INSTAGRAM_SESSION_POOL', [
     [
-        // Account 1 (@vishwraj__122 - Active)
+        // Account 1 (@vishwraj__122 - Active) -> Bound to Webshare 1 (UK Residential IP)
         'session_id' => '22996724939%3A4fstArIFHp1lNb%3A3%3AAYm9i9tUERUKQ3_Jo6ZqvP1CJHReOcd9WQLyoNqXrw',
         'csrf_token' => 'vDkYByWZP85iBTCGViE6jdSsukKvlZMo',
-        'ds_user_id' => '22996724939'
+        'ds_user_id' => '22996724939',
+        'proxy'      => 'http://uokhrcxp:hya18iybqf4v@45.38.107.97:6014'
     ],
     [
-        // Account 2 (@rohansharma00785 - Active)
+        // Account 2 (@rohansharma00785 - Active) -> Bound to Webshare 2 (Spain Residential IP)
         'session_id' => '23981181226%3AcbTMwL3vjr8JhN%3A4%3AAYnD6mMnphYwpve-FRtXs4hkyRRV1JpUnAnAqEj1FQ',
         'csrf_token' => 'wizAnaLY6c49jYCB5WkQwcTbxqdxcJ3O',
-        'ds_user_id' => '23981181226'
+        'ds_user_id' => '23981181226',
+        'proxy'      => 'http://yutbtowm:cnpxc51ccibd@64.137.96.74:6641'
     ],
     [
-        // Account 3 (@ronnyshahh - Active)
+        // Account 3 (@ronnyshahh - Active) -> Bound to Webshare 3 (USA Residential IP)
         'session_id' => '38251868688%3ARXAkRFELDTc2uU%3A11%3AAYmyx7ERsxej-8GfhxqX550DWcHFSNUEpcu0rsStHQ',
         'csrf_token' => 'ykYwJefpcUKITz6089DuaaCYvOxm7B2g',
-        'ds_user_id' => '38251868688'
+        'ds_user_id' => '38251868688',
+        'proxy'      => 'http://fqlhhsjf:8js95pqun7tk@198.23.243.226:6361'
     ]
 ]);
 
 // Anti-Ban Proxy Configuration (Guarantees 0% ban by routing server requests via residential IPs)
 define('USE_PROXY', true);
-define('PROXY_URL', 'http://uokhrcxp:hya18iybqf4v@45.38.107.97:6014');
+define('PROXY_URL', 'http://fqlhhsjf:8js95pqun7tk@45.38.107.97:6014');
 
-// 10-Proxy Pool for automatic multi-proxy rotation across UK, US, ES, DE, PL
+// Multi-Account Webshare Proxy Pool (4 Accounts Combined = 40 Proxies & 4 GB Free Bandwidth)
+// Account 1: vishalbaria7096@gmail.com
+// Account 2: developers@digitize-info.com
+// Account 3: solidbanda0@gmail.com
+// Account 4: gujaratisciencehub@gmail.com
 define('PROXY_POOL', [
+    // Webshare Account 1 (vishalbaria7096@gmail.com - 10 Proxies)
     'http://uokhrcxp:hya18iybqf4v@45.38.107.97:6014',
     'http://uokhrcxp:hya18iybqf4v@64.137.96.74:6641',
     'http://uokhrcxp:hya18iybqf4v@198.23.243.226:6361',
@@ -71,6 +80,42 @@ define('PROXY_POOL', [
     'http://uokhrcxp:hya18iybqf4v@64.137.10.153:5803',
     'http://uokhrcxp:hya18iybqf4v@104.164.49.38:7693',
     'http://uokhrcxp:hya18iybqf4v@23.26.71.145:5628',
+
+    // Webshare Account 2 (developers@digitize-info.com - 10 Proxies)
+    'http://yutbtowm:cnpxc51ccibd@45.38.107.97:6014',
+    'http://yutbtowm:cnpxc51ccibd@64.137.96.74:6641',
+    'http://yutbtowm:cnpxc51ccibd@198.23.243.226:6361',
+    'http://yutbtowm:cnpxc51ccibd@38.154.185.97:6370',
+    'http://yutbtowm:cnpxc51ccibd@84.247.60.125:6095',
+    'http://yutbtowm:cnpxc51ccibd@191.96.254.138:6185',
+    'http://yutbtowm:cnpxc51ccibd@198.46.161.42:5092',
+    'http://yutbtowm:cnpxc51ccibd@64.137.10.153:5803',
+    'http://yutbtowm:cnpxc51ccibd@104.164.49.38:7693',
+    'http://yutbtowm:cnpxc51ccibd@23.26.71.145:5628',
+
+    // Webshare Account 3 (solidbanda0@gmail.com - 10 Proxies)
+    'http://fqlhhsjf:8js95pqun7tk@45.38.107.97:6014',
+    'http://fqlhhsjf:8js95pqun7tk@64.137.96.74:6641',
+    'http://fqlhhsjf:8js95pqun7tk@198.23.243.226:6361',
+    'http://fqlhhsjf:8js95pqun7tk@38.154.185.97:6370',
+    'http://fqlhhsjf:8js95pqun7tk@84.247.60.125:6095',
+    'http://fqlhhsjf:8js95pqun7tk@191.96.254.138:6185',
+    'http://fqlhhsjf:8js95pqun7tk@198.46.161.42:5092',
+    'http://fqlhhsjf:8js95pqun7tk@64.137.10.153:5803',
+    'http://fqlhhsjf:8js95pqun7tk@104.164.49.38:7693',
+    'http://fqlhhsjf:8js95pqun7tk@23.26.71.145:5628',
+
+    // Webshare Account 4 (gujaratisciencehub@gmail.com - 10 Proxies)
+    'http://bmgyhllt:bt9je7jh5pw1@45.38.107.97:6014',
+    'http://bmgyhllt:bt9je7jh5pw1@64.137.96.74:6641',
+    'http://bmgyhllt:bt9je7jh5pw1@198.23.243.226:6361',
+    'http://bmgyhllt:bt9je7jh5pw1@38.154.185.97:6370',
+    'http://bmgyhllt:bt9je7jh5pw1@84.247.60.125:6095',
+    'http://bmgyhllt:bt9je7jh5pw1@191.96.254.138:6185',
+    'http://bmgyhllt:bt9je7jh5pw1@198.46.161.42:5092',
+    'http://bmgyhllt:bt9je7jh5pw1@64.137.10.153:5803',
+    'http://bmgyhllt:bt9je7jh5pw1@104.164.49.38:7693',
+    'http://bmgyhllt:bt9je7jh5pw1@23.26.71.145:5628',
 ]);
 
 // Timeouts
