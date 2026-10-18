@@ -113,21 +113,67 @@ function shortcode_to_media_id($shortcode) {
     return $media_id;
 }
 
-// Get list of active sessions from pool with intelligent load-balancing
+// Cooldown & Health Tracking for Instagram Sessions
+function is_session_in_cooldown($sess) {
+    $uid = !empty($sess['ds_user_id']) ? $sess['ds_user_id'] : md5($sess['session_id'] ?? 'none');
+    $file = sys_get_temp_dir() . '/instago_cd_' . $uid . '.txt';
+    if (file_exists($file)) {
+        $time = (int)@file_get_contents($file);
+        if ((time() - $time) < 3600) { // 1 hour safety rest
+            return true;
+        }
+        @unlink($file);
+    }
+    return false;
+}
+
+function mark_session_cooldown($sess) {
+    $uid = !empty($sess['ds_user_id']) ? $sess['ds_user_id'] : md5($sess['session_id'] ?? 'none');
+    $file = sys_get_temp_dir() . '/instago_cd_' . $uid . '.txt';
+    @file_put_contents($file, (string)time(), LOCK_EX);
+}
+
+// Deterministic Sticky Proxy: Binds each account permanently to ONE fixed proxy IP
+// Prevents "Impossible Travel / Rapid IP Switching" warnings from Instagram AI
+function get_session_sticky_proxy($sess) {
+    if (!defined('USE_PROXY') || !USE_PROXY) return '';
+    if (!empty($sess['proxy'])) return $sess['proxy'];
+
+    if (defined('PROXY_POOL') && is_array(PROXY_POOL) && !empty(PROXY_POOL)) {
+        $valid_proxies = array_values(array_filter(PROXY_POOL));
+        if (!empty($valid_proxies)) {
+            // Check direct mapping from account pool index (Account 1 -> Proxy 1, Account 2 -> Proxy 2, etc.)
+            if (defined('INSTAGRAM_SESSION_POOL') && is_array(INSTAGRAM_SESSION_POOL)) {
+                foreach (INSTAGRAM_SESSION_POOL as $idx => $item) {
+                    if ((!empty($item['ds_user_id']) && $item['ds_user_id'] === ($sess['ds_user_id'] ?? ''))
+                        || (!empty($item['session_id']) && $item['session_id'] === ($sess['session_id'] ?? ''))) {
+                        return $valid_proxies[$idx % count($valid_proxies)];
+                    }
+                }
+            }
+            $uid = !empty($sess['ds_user_id']) ? $sess['ds_user_id'] : ($sess['session_id'] ?? 'default');
+            $idx = abs(crc32($uid)) % count($valid_proxies);
+            return $valid_proxies[$idx];
+        }
+    }
+    return defined('PROXY_URL') ? PROXY_URL : '';
+}
+
+// Get list of active sessions from pool with intelligent health filtering & load balancing
 function get_instagram_session_pool() {
     $pool = [];
     if (defined('INSTAGRAM_SESSION_POOL') && is_array(INSTAGRAM_SESSION_POOL) && !empty(INSTAGRAM_SESSION_POOL)) {
-        // Filter out empty entries
         $valid = array_filter(INSTAGRAM_SESSION_POOL, function($item) {
-            return !empty($item['session_id']);
+            return !empty($item['session_id']) && !is_session_in_cooldown($item);
         });
         $pool = array_values($valid);
         
-        // Anti-Ban Multi-Account Load Balancing:
-        // Automatically shuffles accounts so each request uses a different account,
-        // dividing traffic equally and keeping every account 100% safe under Instagram's radar.
-        if (count($pool) > 1) {
-            shuffle($pool);
+        // If all accounts are in cooldown, use all valid accounts as fallback
+        if (empty($pool)) {
+            $fallback = array_filter(INSTAGRAM_SESSION_POOL, function($item) {
+                return !empty($item['session_id']);
+            });
+            $pool = array_values($fallback);
         }
     } elseif (defined('INSTAGRAM_SESSION_ID') && !empty(INSTAGRAM_SESSION_ID)) {
         $pool[] = [
@@ -136,8 +182,13 @@ function get_instagram_session_pool() {
             'ds_user_id' => defined('INSTAGRAM_DS_USER_ID') ? INSTAGRAM_DS_USER_ID : ''
         ];
     }
+    // Dynamic Load Balancing: Shuffle active accounts so traffic is distributed equally
+    if (count($pool) > 1) {
+        shuffle($pool);
+    }
     return $pool;
 }
+
 
 function get_session_cookies($sess) {
     if (empty($sess['session_id'])) return '';
@@ -147,8 +198,8 @@ function get_session_cookies($sess) {
     return $c;
 }
 
-// Universal cURL helper with Anti-Ban Fingerprint Protection
-function make_curl_request($url, $headers = [], $post_data = null, $cookies = '') {
+// Universal cURL helper with Anti-Ban Fingerprint Protection & Header Deduplication
+function make_curl_request($url, $headers = [], $post_data = null, $cookies = '', $custom_proxy = null) {
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -158,25 +209,27 @@ function make_curl_request($url, $headers = [], $post_data = null, $cookies = ''
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
     curl_setopt($ch, CURLOPT_TIMEOUT, CURL_TIMEOUT);
     
-    // Rotate realistic browser user-agents to prevent static fingerprinting
-    $desktop_uas = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    ];
-    $selected_ua = $desktop_uas[array_rand($desktop_uas)];
-
+    // Default desktop browser headers
     $default_headers = [
-        'User-Agent: ' . $selected_ua,
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language: en-US,en;q=0.9',
         'Sec-Fetch-Mode: navigate'
     ];
     
-    if (!empty($headers)) {
-        $default_headers = array_merge($default_headers, $headers);
+    // Clean deduplicated header merge (prevents duplicate User-Agent or Referer headers)
+    $merged = [];
+    foreach ($default_headers as $h) {
+        $colon = strpos($h, ':');
+        $k = ($colon !== false) ? strtolower(trim(substr($h, 0, $colon))) : strtolower(trim($h));
+        $merged[$k] = $h;
     }
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $default_headers);
+    foreach ($headers as $h) {
+        $colon = strpos($h, ':');
+        $k = ($colon !== false) ? strtolower(trim(substr($h, 0, $colon))) : strtolower(trim($h));
+        $merged[$k] = $h;
+    }
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array_values($merged));
 
     if (!empty($cookies)) {
         curl_setopt($ch, CURLOPT_COOKIE, $cookies);
@@ -187,10 +240,12 @@ function make_curl_request($url, $headers = [], $post_data = null, $cookies = ''
         curl_setopt($ch, CURLOPT_POSTFIELDS, is_array($post_data) ? http_build_query($post_data) : $post_data);
     }
 
-    // Anti-Ban Proxy Routing (Supports single proxy or rotating proxy pool)
+    // Anti-Ban Proxy Routing
     $proxy = '';
     if (defined('USE_PROXY') && USE_PROXY) {
-        if (defined('PROXY_POOL') && is_array(PROXY_POOL) && !empty(PROXY_POOL)) {
+        if (!empty($custom_proxy)) {
+            $proxy = $custom_proxy;
+        } elseif (defined('PROXY_POOL') && is_array(PROXY_POOL) && !empty(PROXY_POOL)) {
             $valid_proxies = array_values(array_filter(PROXY_POOL));
             if (!empty($valid_proxies)) {
                 $proxy = $valid_proxies[array_rand($valid_proxies)];
@@ -346,6 +401,7 @@ function fetch_instagram_dp($username) {
 
     foreach ($sessions as $sess) {
         $cookies = get_session_cookies($sess);
+        $sticky_proxy = get_session_sticky_proxy($sess);
 
         // 1. Try web profile info endpoint
         $api_url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
@@ -356,7 +412,7 @@ function fetch_instagram_dp($username) {
             'Referer: https://www.instagram.com/' . urlencode($username) . '/'
         ];
         
-        $res = make_curl_request($api_url, $headers, null, $cookies);
+        $res = make_curl_request($api_url, $headers, null, $cookies, $sticky_proxy);
         if ($res['code'] === 200 && !empty($res['body'])) {
             $json = json_decode($res['body'], true);
             $user = $json['data']['user'] ?? null;
@@ -391,6 +447,8 @@ function fetch_instagram_dp($username) {
                     ];
                 }
             }
+        } elseif ($res['code'] === 302 || $res['code'] === 401 || strpos($res['body'] ?? '', 'checkpoint_required') !== false || strpos($res['body'] ?? '', 'require_login') !== false) {
+            mark_session_cooldown($sess);
         }
 
         // 2. Try web search API (highly reliable, returns DP even when web profile info is rate-limited)
@@ -405,7 +463,7 @@ function fetch_instagram_dp($username) {
             'Accept-Language: en-US,en;q=0.9',
             'Accept: */*'
         ];
-        $s_res = make_curl_request($search_url, $m_headers, null, $cookies);
+        $s_res = make_curl_request($search_url, $m_headers, null, $cookies, $sticky_proxy);
         if ($s_res['code'] === 200 && !empty($s_res['body'])) {
             $s_data = json_decode($s_res['body'], true);
             foreach ($s_data['users'] ?? [] as $u) {
@@ -477,84 +535,124 @@ function fetch_instagram_dp($username) {
     return null;
 }
 
-// 3. Zero-Burn Anonymous Embed Scraper (Public Reels & Posts)
+// 3. Zero-Burn Anonymous Embed Scraper (Public Reels, Posts & Carousels - 100% Account Free)
 function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
     $embed_url = "https://www.instagram.com/{$url_type}/{$shortcode}/embed/captioned/";
-    $res = make_curl_request($embed_url, [], null, '');
+    $res = make_curl_request($embed_url, [
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language: en-US,en;q=0.9',
+        'Sec-Fetch-Mode: navigate'
+    ], null, '');
+
     if ($res['code'] === 200 && !empty($res['body'])) {
         $html = $res['body'];
         
-        // Find video URLs
+        $clean_fn = function($str) {
+            $decoded = stripslashes(html_entity_decode($str));
+            $decoded = str_replace(['\\/', '\/'], '/', $decoded);
+            return preg_replace('/[\\\\"]+.*$/', '', trim($decoded));
+        };
+
+        // 1. Find all video URLs
         $video_urls = [];
-        if (preg_match('/video_url":"([^"]+)"/', $html, $m)) {
-            $video_urls[] = stripslashes(str_replace('\/', '/', $m[1]));
+        // Pattern A: Match explicit video_url pattern (handles \", \\", \\\", etc.)
+        if (preg_match_all('/video_url(?:\\\\*")?\s*:\s*\\\\*"([^"\\\\]*(?:\\\\.[^"\\\\]*)*?)\\\\*"/i', $html, $m_vid)) {
+            foreach ($m_vid[1] as $raw) {
+                $v = $clean_fn($raw);
+                if ($v && filter_var($v, FILTER_VALIDATE_URL) && !in_array($v, $video_urls)) {
+                    $video_urls[] = $v;
+                }
+            }
         }
-        if (preg_match_all('/https?:\\\\\/\\\\\/[^"\'\s]+\.mp4[^"\'\s]*/i', $html, $all_mp4)) {
-            foreach ($all_mp4[0] as $mp4) {
-                $clean = stripslashes(str_replace('\/', '/', $mp4));
-                if (!in_array($clean, $video_urls)) {
-                    $video_urls[] = $clean;
+        // Pattern B: Match any cdninstagram .mp4 URLs in body
+        if (preg_match_all('/https?:(?:\\\\\/|[\/\\\\])+[^"\'\s<>]+\.mp4[^"\'\s<>]*/i', $html, $all_mp4)) {
+            foreach ($all_mp4[0] as $raw) {
+                $v = $clean_fn($raw);
+                if ($v && filter_var($v, FILTER_VALIDATE_URL) && !in_array($v, $video_urls)) {
+                    $video_urls[] = $v;
                 }
             }
         }
 
-        // Find thumbnail / display image
+        // 2. Find thumbnail / display image
         $thumbnail = '';
-        if (preg_match('/display_url":"([^"]+)"/', $html, $m)) {
-            $thumbnail = stripslashes(str_replace('\/', '/', $m[1]));
-        } elseif (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
-            $thumbnail = html_entity_decode($m[1]);
+        if (preg_match('/display_url(?:\\\\*")?\s*:\s*\\\\*"([^"\\\\]*(?:\\\\.[^"\\\\]*)*?)\\\\*"/i', $html, $m_thumb)) {
+            $thumbnail = $clean_fn($m_thumb[1]);
+        }
+        if (!$thumbnail && preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m_og)) {
+            $thumbnail = html_entity_decode($m_og[1]);
         }
 
-        // Find caption & author
-        $caption = '';
-        if (preg_match('/<div class="Caption">([\s\S]*?)<\/div>/i', $html, $m)) {
-            $caption = trim(strip_tags($m[1]));
-        }
+        // 3. Find Author
         $author = '';
-        if (preg_match('/<a class="EmbeddedUsername[^"]*"[^>]*>([^<]+)<\/a>/i', $html, $m)) {
-            $author = trim($m[1]);
+        if (preg_match('/<span class="UsernameText">([^<]+)<\/span>/i', $html, $m_u)) {
+            $author = trim($m_u[1]);
+        } elseif (preg_match('/username=([A-Za-z0-9._-]+)/i', $html, $m_u)) {
+            $author = trim($m_u[1]);
+        } elseif (preg_match('/<a class="EmbeddedUsername[^"]*"[^>]*>([^<]+)<\/a>/i', $html, $m_u)) {
+            $author = trim($m_u[1]);
         }
 
+        // 4. Find Caption
+        $caption = '';
+        if (preg_match('/<div class="Caption">([\s\S]*?)<\/div>/i', $html, $m_cap)) {
+            $caption = trim(strip_tags($m_cap[1]));
+        }
+
+        // If video found (Reels / Video Post)
         if (!empty($video_urls)) {
             $best_video = $video_urls[0];
+            $media_list = [];
+            foreach ($video_urls as $idx => $v_item) {
+                $num = $idx + 1;
+                $label = (count($video_urls) > 1) ? "Video #{$num} (Full HD MP4)" : "Full HD 1080p (MP4)";
+                $media_list[] = [
+                    'type' => 'video',
+                    'quality' => $label,
+                    'title' => (count($video_urls) > 1) ? "Slide #{$num}" : "HD Video",
+                    'thumbnail' => $thumbnail,
+                    'url' => $v_item,
+                    'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode . ($num > 1 ? '_part' . $num : '')) . ($thumbnail ? '&thumb=' . urlencode(base64_encode($thumbnail)) : '') . '&url=' . base64_encode($v_item)
+                ];
+            }
+            if ($thumbnail) {
+                $media_list[] = [
+                    'type' => 'image',
+                    'quality' => 'Thumbnail HD (JPG)',
+                    'title' => 'Cover Photo',
+                    'thumbnail' => $thumbnail,
+                    'url' => $thumbnail,
+                    'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode($thumbnail)
+                ];
+            }
+
             return [
                 'type' => 'reel',
                 'shortcode' => $shortcode,
                 'author' => $author ?: 'Instagram User',
-                'caption' => $caption ?: 'Instagram Video',
-                'thumbnail' => $thumbnail,
+                'caption' => $caption ?: '✨ Instagram Video (Ready to Download)',
+                'thumbnail' => $thumbnail ?: $best_video,
                 'download_url' => $best_video,
-                'media' => [
-                    [
-                        'type' => 'video',
-                        'quality' => 'HD 1080p / MP4',
-                        'url' => $best_video,
-                        'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . $shortcode) . ($thumbnail ? '&thumb=' . urlencode(base64_encode($thumbnail)) : '') . '&url=' . base64_encode($best_video)
-                    ],
-                    [
-                        'type' => 'image',
-                        'quality' => 'Thumbnail HD (JPG)',
-                        'url' => $thumbnail,
-                        'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode . '_thumb') . '&url=' . base64_encode($thumbnail)
-                    ]
-                ]
+                'media' => $media_list
             ];
         }
 
-        // If it's a photo post
+        // If photo post
         if (!empty($thumbnail)) {
             return [
                 'type' => 'post',
                 'shortcode' => $shortcode,
                 'author' => $author ?: 'Instagram User',
-                'caption' => $caption ?: 'Instagram Photo',
+                'caption' => $caption ?: '✨ Instagram Photo (Ready to Download)',
                 'thumbnail' => $thumbnail,
                 'download_url' => $thumbnail,
                 'media' => [
                     [
                         'type' => 'image',
-                        'quality' => 'HD Photo (JPG)',
+                        'quality' => 'Original High Resolution (JPG)',
+                        'title' => 'Photo',
+                        'thumbnail' => $thumbnail,
                         'url' => $thumbnail,
                         'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_' . $shortcode) . '&url=' . base64_encode($thumbnail)
                     ]
@@ -579,6 +677,7 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
 
     foreach ($sessions as $sess) {
         $cookies = get_session_cookies($sess);
+        $sticky_proxy = get_session_sticky_proxy($sess);
 
         // Engine A: Media Info API with authentic Web headers
         if ($media_id) {
@@ -598,13 +697,15 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
                 'Sec-Fetch-Site: same-origin',
                 'Accept: */*'
             ];
-            $m_res = make_curl_request($mobile_api, $headers, null, $cookies);
+            $m_res = make_curl_request($mobile_api, $headers, null, $cookies, $sticky_proxy);
             if ($m_res['code'] === 200 && !empty($m_res['body'])) {
                 $m_data = json_decode($m_res['body'], true);
                 $item = $m_data['items'][0] ?? null;
                 if ($item) {
                     return parse_instagram_item($item, $shortcode);
                 }
+            } elseif ($m_res['code'] === 302 || $m_res['code'] === 401 || strpos($m_res['body'] ?? '', 'checkpoint_required') !== false || strpos($m_res['body'] ?? '', 'require_login') !== false) {
+                mark_session_cooldown($sess);
             }
         }
 
@@ -623,13 +724,15 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
                 'doc_id' => '24368985919464652',
                 'variables' => json_encode(['shortcode' => $shortcode])
             ];
-            $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies);
+            $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies, $sticky_proxy);
             if ($gql_res['code'] === 200 && !empty($gql_res['body'])) {
                 $gql_json = json_decode($gql_res['body'], true);
                 $media = $gql_json['data']['xdt_shortcode_media'] ?? null;
                 if ($media) {
                     return parse_graphql_media($media, $shortcode);
                 }
+            } elseif ($gql_res['code'] === 302 || $gql_res['code'] === 401 || strpos($gql_res['body'] ?? '', 'checkpoint_required') !== false || strpos($gql_res['body'] ?? '', 'require_login') !== false) {
+                mark_session_cooldown($sess);
             }
         }
     }
@@ -796,11 +899,12 @@ function fetch_instagram_story($username, $story_id = null) {
 
     foreach ($sessions as $sess) {
         $cookies = get_session_cookies($sess);
+        $sticky_proxy = get_session_sticky_proxy($sess);
 
         // Method 1: Specific Story Item ID (e.g. stories/username/1234567890)
         if (!empty($story_id)) {
             $api_url = "https://i.instagram.com/api/v1/media/{$story_id}/info/";
-            $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
+            $res = make_curl_request($api_url, $mobile_headers, null, $cookies, $sticky_proxy);
             if ($res['code'] === 200 && !empty($res['body'])) {
                 $data = json_decode($res['body'], true);
                 $item = $data['items'][0] ?? null;
@@ -839,6 +943,8 @@ function fetch_instagram_story($username, $story_id = null) {
                         'media' => $media_list
                     ];
                 }
+            } elseif ($res['code'] === 302 || $res['code'] === 401 || strpos($res['body'] ?? '', 'checkpoint_required') !== false || strpos($res['body'] ?? '', 'require_login') !== false) {
+                mark_session_cooldown($sess);
             }
         }
 
@@ -846,20 +952,22 @@ function fetch_instagram_story($username, $story_id = null) {
         if (strtolower($username) === 'highlights' && !empty($story_id)) {
             $reel_key = "highlight:{$story_id}";
             $api_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$reel_key}";
-            $res = make_curl_request($api_url, $mobile_headers, null, $cookies);
+            $res = make_curl_request($api_url, $mobile_headers, null, $cookies, $sticky_proxy);
             if ($res['code'] === 200 && !empty($res['body'])) {
                 $data = json_decode($res['body'], true);
                 $items = $data['reels'][$reel_key]['items'] ?? [];
                 if (!empty($items)) {
                     return parse_story_items($items, 'Highlight');
                 }
+            } elseif ($res['code'] === 302 || $res['code'] === 401 || strpos($res['body'] ?? '', 'checkpoint_required') !== false || strpos($res['body'] ?? '', 'require_login') !== false) {
+                mark_session_cooldown($sess);
             }
         }
 
         // Method 3: Fetch all active stories for user by resolving User ID
         $user_id = null;
         $search_url = "https://i.instagram.com/api/v1/users/search/?q=" . urlencode($username);
-        $s_res = make_curl_request($search_url, $mobile_headers, null, $cookies);
+        $s_res = make_curl_request($search_url, $mobile_headers, null, $cookies, $sticky_proxy);
         if ($s_res['code'] === 200 && !empty($s_res['body'])) {
             $s_data = json_decode($s_res['body'], true);
             foreach ($s_data['users'] ?? [] as $u) {
@@ -875,7 +983,7 @@ function fetch_instagram_story($username, $story_id = null) {
             $p_res = make_curl_request($profile_url, [
                 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
                 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-            ], null, $cookies);
+            ], null, $cookies, $sticky_proxy);
 
             if ($p_res['code'] === 200 && !empty($p_res['body'])) {
                 if (preg_match('/"props":{"id":"([0-9]+)"/i', $p_res['body'], $m) || 
@@ -888,13 +996,15 @@ function fetch_instagram_story($username, $story_id = null) {
 
         if ($user_id) {
             $reels_url = "https://i.instagram.com/api/v1/feed/reels_media/?reel_ids={$user_id}";
-            $r_res = make_curl_request($reels_url, $mobile_headers, null, $cookies);
+            $r_res = make_curl_request($reels_url, $mobile_headers, null, $cookies, $sticky_proxy);
             if ($r_res['code'] === 200 && !empty($r_res['body'])) {
                 $r_data = json_decode($r_res['body'], true);
                 $items = $r_data['reels'][$user_id]['items'] ?? [];
                 if (!empty($items)) {
                     return parse_story_items($items, $username);
                 }
+            } elseif ($r_res['code'] === 302 || $r_res['code'] === 401 || strpos($r_res['body'] ?? '', 'checkpoint_required') !== false || strpos($r_res['body'] ?? '', 'require_login') !== false) {
+                mark_session_cooldown($sess);
             }
         }
     }

@@ -28,29 +28,29 @@ define('RAPIDAPI_HOST', 'instagram-downloader-download-instagram-videos-stories1
 
 // Primary Instagram Session Cookie (sessionid)
 // NOTE: NEVER use personal Instagram accounts! Instagram bans personal accounts used on servers.
-define('INSTAGRAM_SESSION_ID', '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9jLNltGiJinF4pGJRiZIbM2DmDtzd2iQ');
-define('INSTAGRAM_CSRF_TOKEN', '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd');
+define('INSTAGRAM_SESSION_ID', '22996724939%3A4fstArIFHp1lNb%3A3%3AAYm9i9tUERUKQ3_Jo6ZqvP1CJHReOcd9WQLyoNqXrw');
+define('INSTAGRAM_CSRF_TOKEN', 'vDkYByWZP85iBTCGViE6jdSsukKvlZMo');
 define('INSTAGRAM_DS_USER_ID', '22996724939');
 
 // Multi-Account Anti-Ban Session Pool (Load-Balanced)
 // Add all your active accounts here. Traffic is automatically divided equally across all accounts.
 define('INSTAGRAM_SESSION_POOL', [
     [
-        // Account 1 (Active)
-        'session_id' => '22996724939%3AK5Zi6yeqjWfZ1R%3A19%3AAYnlWO1cKV9jLNltGiJinF4pGJRiZIbM2DmDtzd2iQ',
-        'csrf_token' => '4ukCpjDx9plIbLX5Kk5nDvRVIdy5bVqd',
+        // Account 1 (@vishwraj__122 - Active)
+        'session_id' => '22996724939%3A4fstArIFHp1lNb%3A3%3AAYm9i9tUERUKQ3_Jo6ZqvP1CJHReOcd9WQLyoNqXrw',
+        'csrf_token' => 'vDkYByWZP85iBTCGViE6jdSsukKvlZMo',
         'ds_user_id' => '22996724939'
     ],
     [
         // Account 2 (@rohansharma00785 - Active)
-        'session_id' => '23981181226%3ABQE9NutBKVVwCl%3A0%3AAYkN5FirwFtgy2hivXTIFnG8tV1u5r7VBU7LirYZRg',
-        'csrf_token' => 'XdOVXGN9vA3eHrUOwqxHlRTBHP5Ob0XI',
+        'session_id' => '23981181226%3AcbTMwL3vjr8JhN%3A4%3AAYnD6mMnphYwpve-FRtXs4hkyRRV1JpUnAnAqEj1FQ',
+        'csrf_token' => 'wizAnaLY6c49jYCB5WkQwcTbxqdxcJ3O',
         'ds_user_id' => '23981181226'
     ],
     [
         // Account 3 (@ronnyshahh - Active)
-        'session_id' => '38251868688%3AjsG1EruCk9csaH%3A17%3AAYlnvEYrGwwDzEm0TW_icQjlXMJEtNuHKvP_6990Bg',
-        'csrf_token' => 'IP37ix6gu5BUagHLXFHgE3FF7kGOBuZQ',
+        'session_id' => '38251868688%3ARXAkRFELDTc2uU%3A11%3AAYmyx7ERsxej-8GfhxqX550DWcHFSNUEpcu0rsStHQ',
+        'csrf_token' => 'ykYwJefpcUKITz6089DuaaCYvOxm7B2g',
         'ds_user_id' => '38251868688'
     ]
 ]);
