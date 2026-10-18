@@ -48,6 +48,9 @@ function decode_media_url($raw) {
 }
 
 $url = decode_media_url($raw_url);
+if (!empty($url)) {
+    $url = str_replace(['u0026', '&amp;', '\\u0026'], '&', $url);
+}
 $thumb_url = !empty($raw_thumb) ? decode_media_url($raw_thumb) : '';
 
 if (!$url || !preg_match('/^https?:\/\//i', $url)) {
@@ -226,9 +229,9 @@ if (isset($_GET['direct']) && $_GET['direct'] == '1') {
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    // If streaming failed or CDN returned error/403, fallback to direct browser redirect to CDN
+    // If streaming failed or CDN returned error/403, safely return home with error (never show raw Bad URL hash)
     if (!$headers_sent || $http_code >= 400) {
-        header('Location: ' . $url);
+        header('Location: index.php?err=expired');
         exit;
     }
     exit;

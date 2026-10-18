@@ -63,10 +63,13 @@ function get_cached_media($key) {
             $content = @file_get_contents($cache_file);
             if ($content) {
                 $decoded = json_decode($content, true);
-                // Sanity check: Invalidate and purge if a Reel URL was improperly cached as a photo post or has no valid video
-                if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $clean_key) && (($decoded['type'] ?? '') !== 'reel' || empty($decoded['download_url']) || strpos($decoded['download_url'], '.mp4') === false)) {
-                    @unlink($cache_file);
-                    return null;
+                // Sanity check: Invalidate and purge if a Reel URL was improperly cached as a photo post or has no valid video or bad signature
+                if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $clean_key)) {
+                    $dl = $decoded['download_url'] ?? '';
+                    if (($decoded['type'] ?? '') !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false) {
+                        @unlink($cache_file);
+                        return null;
+                    }
                 }
                 if (is_array($decoded) && (!empty($decoded['download_url']) || !empty($decoded['media']))) {
                     return $decoded;
@@ -79,9 +82,12 @@ function get_cached_media($key) {
 
 function set_cached_media($key, $data) {
     if (!empty($data) && is_array($data) && (!empty($data['download_url']) || !empty($data['media']))) {
-        // Guard: Never cache a photo post or missing video for a reel URL
-        if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $key) && (($data['type'] ?? '') !== 'reel' || empty($data['download_url']) || strpos($data['download_url'], '.mp4') === false)) {
-            return;
+        // Guard: Never cache invalid, incomplete or corrupted reel video
+        if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $key)) {
+            $dl = $data['download_url'] ?? '';
+            if (($data['type'] ?? '') !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false) {
+                return;
+            }
         }
         $clean_key = preg_replace('/[?#].*$/', '', trim($key));
         $cache_file = sys_get_temp_dir() . '/instago_m_' . md5($clean_key) . '.json';
@@ -109,19 +115,46 @@ function json_fail($message, $code = 400) {
     exit;
 }
 
-// Convert Instagram shortcode to media id
+// Convert Instagram shortcode to media id with multi-engine precision math
 function shortcode_to_media_id($shortcode) {
     $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-    $media_id = '0';
-    for ($i = 0; $i < strlen($shortcode); $i++) {
-        $char = $shortcode[$i];
-        $val = strpos($alphabet, $char);
-        if ($val === false) return false;
-        if (function_exists('bcadd')) {
+    if (function_exists('bcadd')) {
+        $media_id = '0';
+        for ($i = 0; $i < strlen($shortcode); $i++) {
+            $val = strpos($alphabet, $shortcode[$i]);
+            if ($val === false) return false;
             $media_id = bcadd(bcmul($media_id, '64'), (string)$val);
         }
+        return $media_id;
+    } elseif (function_exists('gmp_init')) {
+        $media_id = gmp_init('0');
+        for ($i = 0; $i < strlen($shortcode); $i++) {
+            $val = strpos($alphabet, $shortcode[$i]);
+            if ($val === false) return false;
+            $media_id = gmp_add(gmp_mul($media_id, 64), $val);
+        }
+        return gmp_strval($media_id);
+    } else {
+        $res = '0';
+        for ($i = 0; $i < strlen($shortcode); $i++) {
+            $val = strpos($alphabet, $shortcode[$i]);
+            if ($val === false) return false;
+            $carry = $val;
+            $len = strlen($res);
+            $new_res = '';
+            for ($j = $len - 1; $j >= 0; $j--) {
+                $cur = (int)$res[$j] * 64 + $carry;
+                $new_res = ($cur % 10) . $new_res;
+                $carry = intdiv($cur, 10);
+            }
+            while ($carry > 0) {
+                $new_res = ($carry % 10) . $new_res;
+                $carry = intdiv($carry, 10);
+            }
+            $res = $new_res ?: '0';
+        }
+        return $res;
     }
-    return $media_id;
 }
 
 // Cooldown & Health Tracking for Instagram Sessions
@@ -562,9 +595,20 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
         $html = $res['body'];
         
         $clean_fn = function($str) {
-            $decoded = stripslashes(html_entity_decode($str));
-            $decoded = str_replace(['\\/', '\/'], '/', $decoded);
-            return preg_replace('/[\\\\"]+.*$/', '', trim($decoded));
+            if (empty($str)) return '';
+            // 1. Unescape JSON unicode ampersands (\u0026 and \\u0026) to prevent 'Bad URL hash' signature corruption
+            $str = str_replace(['\\\\u0026', '\\u0026', '\u0026', 'u0026'], '&', $str);
+            // 2. Decode general unicode escape sequences
+            $str = preg_replace_callback('/\\\\u([0-9a-fA-F]{4})/', function($m) {
+                return mb_convert_encoding(pack('H*', $m[1]), 'UTF-8', 'UCS-2BE');
+            }, $str);
+            // 3. Decode HTML entities (&amp; -> &)
+            $str = html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            // 4. Decode escaped slashes (\/ -> /)
+            $str = str_replace(['\\/', '\/'], '/', $str);
+            // 5. Clean up any trailing backslashes or quotes
+            $str = stripslashes($str);
+            return trim($str, " \t\n\r\0\x0B\"'\\");
         };
 
         // 1. Find all video URLs
@@ -574,7 +618,9 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
             foreach ($m_vid[1] as $raw) {
                 $v = $clean_fn($raw);
                 if ($v && filter_var($v, FILTER_VALIDATE_URL) && !in_array($v, $video_urls)) {
-                    $video_urls[] = $v;
+                    if (strpos($v, 'oh=') !== false && strpos($v, 'oe=') !== false && strpos($v, 'u0026') === false) {
+                        $video_urls[] = $v;
+                    }
                 }
             }
         }
@@ -583,7 +629,9 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
             foreach ($all_mp4[0] as $raw) {
                 $v = $clean_fn($raw);
                 if ($v && filter_var($v, FILTER_VALIDATE_URL) && !in_array($v, $video_urls)) {
-                    $video_urls[] = $v;
+                    if (strpos($v, 'oh=') !== false && strpos($v, 'oe=') !== false && strpos($v, 'u0026') === false) {
+                        $video_urls[] = $v;
+                    }
                 }
             }
         }
@@ -677,8 +725,9 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
     // Stage 1: Zero-Burn Anonymous Scraper (Protects all dummy accounts from suspension)
     $embed_res = fetch_via_embed_scraper($shortcode, $url_type);
     if ($embed_res) {
-        if ($url_type === 'reel' && ($embed_res['type'] !== 'reel' || empty($embed_res['download_url']) || strpos($embed_res['download_url'], '.mp4') === false)) {
-            // Discard: Reel requested, but embed result has no valid MP4 video. Proceed to Stage 2!
+        $dl = $embed_res['download_url'] ?? '';
+        if ($url_type === 'reel' && ($embed_res['type'] !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false)) {
+            // Discard: Reel requested, but embed result has no valid signed MP4 video. Proceed to Stage 2!
         } else {
             return $embed_res;
         }
@@ -740,6 +789,10 @@ function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
             $gql_res = make_curl_request($gql_url, $gql_headers, $gql_data, $cookies, $sticky_proxy);
             if ($gql_res['code'] === 200 && !empty($gql_res['body'])) {
                 $gql_json = json_decode($gql_res['body'], true);
+                $item = $gql_json['data']['xdt_api__v1__media__shortcode__web_info']['items'][0] ?? null;
+                if ($item) {
+                    return parse_instagram_item($item, $shortcode);
+                }
                 $media = $gql_json['data']['xdt_shortcode_media'] ?? null;
                 if ($media) {
                     return parse_graphql_media($media, $shortcode);
@@ -1158,13 +1211,15 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
 // 2. Reels: instagram.com/reel/SHORTCODE or /reels/SHORTCODE
 if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
     $shortcode = $m[1];
-    $rapid = fetch_via_rapidapi($input_url);
-    if ($rapid) json_success($rapid, $cache_key);
+    if (strtolower($shortcode) !== 'audio') {
+        $rapid = fetch_via_rapidapi($input_url);
+        if ($rapid) json_success($rapid, $cache_key);
 
-    $result = fetch_instagram_reel_or_post($shortcode, 'reel');
-    if ($result) json_success($result, $cache_key);
+        $result = fetch_instagram_reel_or_post($shortcode, 'reel');
+        if ($result) json_success($result, $cache_key);
 
-    json_fail('Unable to fetch this Reel. Please make sure the post or account is public.', 404);
+        json_fail('Unable to fetch this Reel. Please make sure the post or account is public.', 404);
+    }
 }
 
 // 3. Posts / Photos: instagram.com/p/SHORTCODE or /tv/SHORTCODE
