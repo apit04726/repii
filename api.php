@@ -720,42 +720,72 @@ function fetch_via_rapidapi($url) {
     return null;
 }
 
-// Native Anonymous Instagram Profile Scraper (100% Ban-Free, Works for Public & Private Accounts)
+// Native Anonymous Instagram Profile Scraper (100% Ban-Free, Works for Public & Private Accounts, Local & Live Server)
 function fetch_via_native_profile_scraper($username) {
     $username = trim(ltrim($username, '@'));
     $username = preg_replace('/[^a-zA-Z0-9._]/', '', $username);
     if (empty($username)) return null;
 
     $url = "https://www.instagram.com/{$username}/";
+    $headers = [
+        'User-Agent: facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language: en-US,en;q=0.9'
+    ];
+
+    $html = '';
+    $pic = '';
+
+    // Attempt 1: Direct fetch with Crawler User-Agent (Works on Residential / Local servers)
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 6);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language: en-US,en;q=0.9',
-        'Sec-Fetch-Dest: document',
-        'Sec-Fetch-Mode: navigate',
-        'Sec-Fetch-Site: none',
-        'Upgrade-Insecure-Requests: 1'
-    ]);
-    $html = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $d_html = curl_exec($ch);
+    $d_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($code !== 200 || empty($html)) {
-        return null;
+    if ($d_code === 200 && !empty($d_html) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $d_html, $m)) {
+        $candidate = html_entity_decode($m[1]);
+        if (strpos($candidate, 'static.cdninstagram.com') === false && (strpos($candidate, 'cdninstagram.com') !== false || strpos($candidate, 'fbcdn.net') !== false)) {
+            $pic = $candidate;
+            $html = $d_html;
+        }
     }
 
-    $pic = '';
-    if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
-        $pic = html_entity_decode($m[1]);
+    // Attempt 2: Residential Proxy Pool Fallback (Used when deployed on Vercel / Cloud server where datacenter IPs are blocked)
+    if (empty($pic) && defined('PROXY_POOL') && is_array(PROXY_POOL) && !empty(PROXY_POOL)) {
+        $pool = PROXY_POOL;
+        shuffle($pool);
+        $try_proxies = array_slice($pool, 0, 4);
+        foreach ($try_proxies as $prx) {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_PROXY, $prx);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 7);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            $p_html = curl_exec($ch);
+            $p_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($p_code === 200 && !empty($p_html) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $p_html, $m)) {
+                $candidate = html_entity_decode($m[1]);
+                if (strpos($candidate, 'static.cdninstagram.com') === false && (strpos($candidate, 'cdninstagram.com') !== false || strpos($candidate, 'fbcdn.net') !== false)) {
+                    $pic = $candidate;
+                    $html = $p_html;
+                    break;
+                }
+            }
+        }
     }
 
-    if (empty($pic) || strpos($pic, 'static.cdninstagram.com') !== false) {
+    if (empty($pic)) {
         return null;
     }
 
@@ -816,18 +846,19 @@ function fetch_instagram_dp($username) {
     $username = preg_replace('/[^a-zA-Z0-9._]/', '', $username);
     if (empty($username)) return null;
 
-    // Stage 0: Direct Reference Site Bridge (Bypasses dummy accounts, 100% Free & Ban-Free)
+    // Stage 0: Native Anonymous Profile OpenGraph Scraper (100% Free, Ban-Free, Works for Public & Private)
+    $native_dp = fetch_via_native_profile_scraper($username);
+    if ($native_dp && !empty($native_dp['download_url'])) {
+        return $native_dp;
+    }
+
+    // Stage 1: Reference Site Bridge Fallback
     $profile_url = "https://www.instagram.com/{$username}/";
     $bridge_dp = fetch_via_reference_bridge($profile_url, $username, 'profile');
     if ($bridge_dp && !empty($bridge_dp['download_url'])) {
         return $bridge_dp;
     }
 
-    // Stage 1: Native Anonymous Profile OpenGraph Scraper (100% Ban-Free, 0 Accounts, Works for Public & Private)
-    $native_dp = fetch_via_native_profile_scraper($username);
-    if ($native_dp && !empty($native_dp['download_url'])) {
-        return $native_dp;
-    }
 
     $sessions = get_instagram_session_pool();
     if (empty($sessions)) {
