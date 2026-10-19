@@ -530,9 +530,15 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                 $items = $m_li[1];
             }
 
+            $is_story_mode = ($type === 'story' || strpos($insta_url, '/stories/') !== false);
             $media_list = [];
             if (!empty($items)) {
                 foreach ($items as $idx => $item_html) {
+                    // When fetching stories, skip the profile avatar card
+                    if ($is_story_mode && stripos($item_html, 'Avatar') !== false) {
+                        continue;
+                    }
+
                     $thumb = '';
                     if (preg_match('/<img[^>]+src="([^"]+)"/i', $item_html, $m_img)) {
                         $thumb = $decode_jwt_token($m_img[1]);
@@ -546,7 +552,7 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                         if (stripos($label, 'other video') !== false) continue;
                         $url = $decode_jwt_token($href);
                         if (strpos($url, '/') === 0) continue;
-                        if (stripos($label, 'Avatar') !== false && ($type === 'story' || strpos($insta_url, '/stories/') !== false)) continue;
+                        if ($is_story_mode && stripos($label, 'Avatar') !== false) continue;
 
                         if (stripos($label, 'Video') !== false || stripos($url, '.mp4') !== false) {
                             $video_url = $url;
@@ -556,18 +562,23 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                     }
                     $is_vid = !empty($video_url);
                     $best_url = $is_vid ? $video_url : $image_url;
-                    if (empty($best_url) && !empty($thumb)) {
+                    if (empty($best_url) && !empty($thumb) && !$is_story_mode) {
                         $best_url = $thumb;
                     }
                     if (!empty($best_url)) {
                         $num = count($media_list) + 1;
+                        $preview_thumb = !empty($thumb)
+                            ? ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num . '_thumb') . '&url=' . base64_encode($thumb))
+                            : ($is_vid ? '' : ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . '&url=' . base64_encode($best_url)));
+
                         $media_list[] = [
                             'type' => $is_vid ? 'video' : 'image',
-                            'quality' => ($type === 'story' || strpos($insta_url, '/stories/') !== false)
+                            'quality' => $is_story_mode
                                 ? ($is_vid ? "Story #{$num} (Full HD MP4)" : "Story #{$num} (HD Photo)")
                                 : ($is_vid ? "Full HD 1080p (MP4)" : "Original HD Photo (JPG)"),
-                            'title' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? "Story #{$num}" : ($is_vid ? "HD Video" : "HD Photo"),
-                            'thumbnail' => $thumb ?: $best_url,
+                            'title' => $is_story_mode ? "Story #{$num}" : ($is_vid ? "HD Video" : "HD Photo"),
+                            'thumbnail' => $preview_thumb ?: ($thumb ?: $best_url),
+                            'preview_url' => $is_vid ? $best_url : ($preview_thumb ?: $best_url),
                             'url' => $best_url,
                             'proxy_url' => 'download.php?type=' . ($is_vid ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($best_url)
                         ];
@@ -583,19 +594,23 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                 foreach ($m_a[1] as $idx => $href) {
                     $label = strip_tags($m_a[2][$idx] ?? '');
                     if (stripos($label, 'other video') !== false || $href === '/') continue;
-                    if (stripos($label, 'Avatar') !== false && ($type === 'story' || strpos($insta_url, '/stories/') !== false)) continue;
+                    if ($is_story_mode && stripos($label, 'Avatar') !== false) continue;
                     if (strpos($href, 'token=') !== false || strpos($href, 'cdninstagram.com') !== false) {
                         $cdn_url = $decode_jwt_token($href);
                         if (strpos($cdn_url, '/') === 0) continue;
                         $is_video = (stripos($label, 'video') !== false || stripos($cdn_url, '.mp4') !== false);
                         $num = count($media_list) + 1;
+                        $preview_thumb = !empty($thumb)
+                            ? ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num . '_thumb') . '&url=' . base64_encode($thumb))
+                            : ($is_video ? '' : ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . '&url=' . base64_encode($cdn_url)));
                         $media_list[] = [
                             'type' => $is_video ? 'video' : 'image',
-                            'quality' => ($type === 'story' || strpos($insta_url, '/stories/') !== false)
+                            'quality' => $is_story_mode
                                 ? ($is_video ? "Story #{$num} (Full HD MP4)" : "Story #{$num} (HD Photo)")
                                 : ($is_video ? "Full HD 1080p (MP4)" : "Original HD Photo (JPG)"),
-                            'title' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? "Story #{$num}" : ($is_video ? "HD Video" : "HD Photo"),
-                            'thumbnail' => $thumb ?: $cdn_url,
+                            'title' => $is_story_mode ? "Story #{$num}" : ($is_video ? "HD Video" : "HD Photo"),
+                            'thumbnail' => $preview_thumb ?: ($thumb ?: $cdn_url),
+                            'preview_url' => $is_video ? $cdn_url : ($preview_thumb ?: $cdn_url),
                             'url' => $cdn_url,
                             'proxy_url' => 'download.php?type=' . ($is_video ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($cdn_url)
                         ];

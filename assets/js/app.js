@@ -539,9 +539,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Prioritize secure proxied preview URL to guarantee bypass of Instagram CDN 403 blocks
                 const candidates = [
                     item.preview_url,
-                    data.preview_url,
-                    item.proxy_url,
                     item.thumbnail,
+                    data.preview_url,
                     data.thumbnail,
                     item.url,
                     item.download_url,
@@ -666,11 +665,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const thumbImg = document.createElement('img');
                 thumbImg.className = 'media-item-thumb-img';
-                thumbImg.src = m.thumbnail || m.url;
+                thumbImg.src = m.thumbnail || m.preview_url || m.url;
                 thumbImg.alt = m.title || `Item ${index + 1}`;
                 thumbImg.referrerPolicy = 'no-referrer';
                 thumbImg.onerror = function() {
-                    if (m.url && this.src !== m.url) {
+                    if (m.preview_url && this.src !== m.preview_url) {
+                        this.src = m.preview_url;
+                    } else if (m.url && this.src !== m.url) {
                         this.src = m.url;
                     }
                 };
