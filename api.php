@@ -417,7 +417,278 @@ function normalize_rapidapi_response($data, $original_url) {
     return null;
 }
 
+// Universal Reference Site Bridge (Direct Bypass to Public Scraper Gateways: InDown & VideoDropper)
+// 100% Account-Free, 0 Cookies, No Account Suspension Risk, 100% Free
+function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel') {
+    $clean_url = explode('?', $insta_url)[0];
+    if (empty($clean_url)) return null;
+
+    $decode_jwt_token = function($href) {
+        if (preg_match('/token=([^&]+)/', $href, $m)) {
+            $parts = explode('.', $m[1]);
+            if (isset($parts[1])) {
+                $payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
+                if (!empty($payload['url'])) {
+                    return $payload['url'];
+                }
+            }
+        }
+        return $href;
+    };
+
+    // Engine A: InDown.net AJAX Bridge (Public Reference Scraper - Reels, Posts, Stories, Highlights, DP)
+    if ($type === 'profile' || $type === 'dp') {
+        $vt = 'profile';
+    } elseif ($type === 'story' || strpos($insta_url, '/stories/') !== false) {
+        $vt = 'story';
+    } else {
+        $vt = 'reel';
+    }
+
+    $post_data = http_build_query([
+        'q' => $clean_url,
+        'vt' => $vt,
+        't' => 'media',
+        'lang' => 'en',
+        'v' => 'v2'
+    ]);
+    $in_headers = [
+        'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
+        'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'X-Requested-With: XMLHttpRequest',
+        'Origin: https://indown.net',
+        'Referer: https://indown.net/'
+    ];
+    $ch = curl_init('https://indown.net/api/ajaxSearch');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $in_headers);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 6);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+    $res = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code === 200 && !empty($res)) {
+        $json = json_decode($res, true);
+        if (!empty($json['data']) && ($json['status'] ?? '') === 'ok') {
+            $html = $json['data'];
+
+            // 1. Profile / DP Handling
+            if ($type === 'profile' || $type === 'dp') {
+                preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $html, $m_a);
+                preg_match_all('/<img[^>]+src="([^"]+)"/i', $html, $m_img);
+                $avatar_url = '';
+                foreach ($m_a[1] as $idx => $href) {
+                    $label = strip_tags($m_a[2][$idx] ?? '');
+                    if (stripos($label, 'Avatar') !== false) {
+                        $avatar_url = $decode_jwt_token($href);
+                        break;
+                    }
+                }
+                if (!$avatar_url && !empty($m_a[1][0])) {
+                    $avatar_url = $decode_jwt_token($m_a[1][0]);
+                }
+                if ($avatar_url && strpos($avatar_url, '/') !== 0) {
+                    $username = $identifier ?: 'instagram_user';
+                    $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($avatar_url);
+                    $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($avatar_url);
+                    return [
+                        'type' => 'dp',
+                        'username' => $username,
+                        'full_name' => $username,
+                        'biography' => '',
+                        'followers' => 0,
+                        'following' => 0,
+                        'posts_count' => 0,
+                        'is_verified' => false,
+                        'is_private' => false,
+                        'thumbnail' => $preview_url,
+                        'preview_url' => $preview_url,
+                        'download_url' => $proxy_url,
+                        'media' => [
+                            [
+                                'type' => 'image',
+                                'quality' => 'Full HD Profile Picture (1080p)',
+                                'url' => $avatar_url,
+                                'thumbnail' => $preview_url,
+                                'preview_url' => $preview_url,
+                                'proxy_url' => $proxy_url
+                            ]
+                        ]
+                    ];
+                }
+            }
+
+            // 2. Stories, Reels & Posts Handling
+            $items = [];
+            if (preg_match_all('/<div class="download-items">([\s\S]*?)<\/div>\s*<\/li>/i', $html, $m_items)) {
+                $items = $m_items[1];
+            } elseif (preg_match_all('/<li[^>]*>([\s\S]*?)<\/li>/i', $html, $m_li)) {
+                $items = $m_li[1];
+            }
+
+            $media_list = [];
+            if (!empty($items)) {
+                foreach ($items as $idx => $item_html) {
+                    $thumb = '';
+                    if (preg_match('/<img[^>]+src="([^"]+)"/i', $item_html, $m_img)) {
+                        $thumb = $decode_jwt_token($m_img[1]);
+                    }
+                    preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $item_html, $m_a);
+                    $video_url = '';
+                    $image_url = '';
+                    foreach ($m_a[1] as $a_idx => $href) {
+                        if ($href === '/' || strpos($href, 'back-home') !== false) continue;
+                        $label = strip_tags($m_a[2][$a_idx] ?? '');
+                        if (stripos($label, 'other video') !== false) continue;
+                        $url = $decode_jwt_token($href);
+                        if (strpos($url, '/') === 0) continue;
+                        if (stripos($label, 'Avatar') !== false && ($type === 'story' || strpos($insta_url, '/stories/') !== false)) continue;
+
+                        if (stripos($label, 'Video') !== false || stripos($url, '.mp4') !== false) {
+                            $video_url = $url;
+                        } elseif (stripos($label, 'Image') !== false || stripos($url, '.jpg') !== false || stripos($url, '.jpeg') !== false) {
+                            $image_url = $url;
+                        }
+                    }
+                    $is_vid = !empty($video_url);
+                    $best_url = $is_vid ? $video_url : $image_url;
+                    if (empty($best_url) && !empty($thumb)) {
+                        $best_url = $thumb;
+                    }
+                    if (!empty($best_url)) {
+                        $num = count($media_list) + 1;
+                        $media_list[] = [
+                            'type' => $is_vid ? 'video' : 'image',
+                            'quality' => ($type === 'story' || strpos($insta_url, '/stories/') !== false)
+                                ? ($is_vid ? "Story #{$num} (Full HD MP4)" : "Story #{$num} (HD Photo)")
+                                : ($is_vid ? "Full HD 1080p (MP4)" : "Original HD Photo (JPG)"),
+                            'title' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? "Story #{$num}" : ($is_vid ? "HD Video" : "HD Photo"),
+                            'thumbnail' => $thumb ?: $best_url,
+                            'url' => $best_url,
+                            'proxy_url' => 'download.php?type=' . ($is_vid ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($best_url)
+                        ];
+                    }
+                }
+            }
+
+            // Fallback flat link matcher if items grouping yielded empty
+            if (empty($media_list)) {
+                preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $html, $m_a);
+                preg_match_all('/<img[^>]+src="([^"]+)"/i', $html, $m_img);
+                $thumb = !empty($m_img[1][0]) ? $decode_jwt_token($m_img[1][0]) : '';
+                foreach ($m_a[1] as $idx => $href) {
+                    $label = strip_tags($m_a[2][$idx] ?? '');
+                    if (stripos($label, 'other video') !== false || $href === '/') continue;
+                    if (stripos($label, 'Avatar') !== false && ($type === 'story' || strpos($insta_url, '/stories/') !== false)) continue;
+                    if (strpos($href, 'token=') !== false || strpos($href, 'cdninstagram.com') !== false) {
+                        $cdn_url = $decode_jwt_token($href);
+                        if (strpos($cdn_url, '/') === 0) continue;
+                        $is_video = (stripos($label, 'video') !== false || stripos($cdn_url, '.mp4') !== false);
+                        $num = count($media_list) + 1;
+                        $media_list[] = [
+                            'type' => $is_video ? 'video' : 'image',
+                            'quality' => ($type === 'story' || strpos($insta_url, '/stories/') !== false)
+                                ? ($is_video ? "Story #{$num} (Full HD MP4)" : "Story #{$num} (HD Photo)")
+                                : ($is_video ? "Full HD 1080p (MP4)" : "Original HD Photo (JPG)"),
+                            'title' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? "Story #{$num}" : ($is_video ? "HD Video" : "HD Photo"),
+                            'thumbnail' => $thumb ?: $cdn_url,
+                            'url' => $cdn_url,
+                            'proxy_url' => 'download.php?type=' . ($is_video ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($cdn_url)
+                        ];
+                    }
+                }
+            }
+
+            if (!empty($media_list)) {
+                $has_video = false;
+                $best_dl = $media_list[0]['url'];
+                foreach ($media_list as $m) {
+                    if ($m['type'] === 'video') {
+                        $has_video = true;
+                        $best_dl = $m['url'];
+                        break;
+                    }
+                }
+                $is_story = ($type === 'story' || strpos($insta_url, '/stories/') !== false);
+                return [
+                    'type' => $is_story ? 'story' : ($has_video ? 'reel' : 'post'),
+                    'shortcode' => $identifier,
+                    'author' => '@' . ($identifier ?: 'instagram_user'),
+                    'caption' => $is_story ? count($media_list) . ' Active Stories found' : '✨ Media Ready to Download (via Reference Bridge)',
+                    'thumbnail' => $media_list[0]['thumbnail'] ?? $best_dl,
+                    'download_url' => $best_dl,
+                    'media' => $media_list
+                ];
+            }
+        }
+    }
+
+    // Engine B: VideoDropper AES-128-ECB Bridge (Reels & Posts)
+    if ($type !== 'story' && strpos($insta_url, '/stories/') === false) {
+        $key = 'qwertyuioplkjhgf';
+        $encrypted = openssl_encrypt($clean_url, 'AES-128-ECB', $key, OPENSSL_RAW_DATA);
+        if ($encrypted) {
+            $enc_hex = bin2hex($encrypted);
+            $vd_headers = [
+                'url: ' . $enc_hex,
+                'Accept: application/json',
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Origin: https://reelsave.app',
+                'Referer: https://reelsave.app/'
+            ];
+            $ch = curl_init('https://api.videodropper.app/allinone');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $vd_headers);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 6);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+            $res = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            if ($code === 200 && !empty($res)) {
+                $data = json_decode($res, true);
+                if (!empty($data['video']) && is_array($data['video'])) {
+                    $media_list = [];
+                    foreach ($data['video'] as $idx => $v) {
+                        $v_url = $v['video'] ?? '';
+                        $t_url = $v['thumbnail'] ?? '';
+                        if ($v_url) {
+                            $media_list[] = [
+                                'type' => 'video',
+                                'quality' => 'Full HD 1080p (MP4)',
+                                'title' => 'HD Video',
+                                'thumbnail' => $t_url ?: $v_url,
+                                'url' => $v_url,
+                                'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_' . ($identifier ?: 'reel') . ($idx > 0 ? '_' . ($idx + 1) : '')) . ($t_url ? '&thumb=' . urlencode(base64_encode($t_url)) : '') . '&url=' . base64_encode($v_url)
+                            ];
+                        }
+                    }
+                    if (!empty($media_list)) {
+                        return [
+                            'type' => 'reel',
+                            'shortcode' => $identifier,
+                            'author' => 'Instagram User',
+                            'caption' => '✨ Instagram Video (via Reference Bridge)',
+                            'thumbnail' => $media_list[0]['thumbnail'],
+                            'download_url' => $media_list[0]['url'],
+                            'media' => $media_list
+                        ];
+                    }
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
 function fetch_via_rapidapi($url) {
+
     if (empty(RAPIDAPI_KEY)) return null;
 
     $api_url = "https://" . RAPIDAPI_HOST . "/?url=" . urlencode($url);
@@ -439,6 +710,13 @@ function fetch_instagram_dp($username) {
     $username = trim(ltrim($username, '@'));
     $username = preg_replace('/[^a-zA-Z0-9._]/', '', $username);
     if (empty($username)) return null;
+
+    // Stage 0: Direct Reference Site Bridge (Bypasses dummy accounts, 100% Free & Ban-Free)
+    $profile_url = "https://www.instagram.com/{$username}/";
+    $bridge_dp = fetch_via_reference_bridge($profile_url, $username, 'profile');
+    if ($bridge_dp && !empty($bridge_dp['download_url'])) {
+        return $bridge_dp;
+    }
 
     $sessions = get_instagram_session_pool();
     if (empty($sessions)) {
@@ -722,8 +1000,17 @@ function fetch_via_embed_scraper($shortcode, $url_type = 'reel') {
 
 // 4. Fetch Reels & Posts with Zero-Burn Priority & Multi-Account Fallbacks
 function fetch_instagram_reel_or_post($shortcode, $url_type = 'reel') {
+    $full_url = "https://www.instagram.com/{$url_type}/{$shortcode}/";
+
+    // Stage 0: Direct Reference Site Bridge (Bypasses dummy accounts, 100% Free & Ban-Free)
+    $bridge_res = fetch_via_reference_bridge($full_url, $shortcode, $url_type);
+    if ($bridge_res && !empty($bridge_res['download_url'])) {
+        return $bridge_res;
+    }
+
     // Stage 1: Zero-Burn Anonymous Scraper (Protects all dummy accounts from suspension)
     $embed_res = fetch_via_embed_scraper($shortcode, $url_type);
+
     if ($embed_res) {
         $dl = $embed_res['download_url'] ?? '';
         if ($url_type === 'reel' && ($embed_res['type'] !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false)) {
@@ -947,10 +1234,29 @@ function parse_graphql_media($media, $shortcode) {
 
 // 4. Stories Fetcher
 function fetch_instagram_story($username, $story_id = null) {
+    // Stage 0: Direct Reference Site Bridge (Bypasses dummy accounts, 100% Free & Ban-Free)
+    $story_url = (strtolower($username) === 'highlights' && !empty($story_id))
+        ? "https://www.instagram.com/stories/highlights/{$story_id}/"
+        : "https://www.instagram.com/stories/{$username}/" . (!empty($story_id) ? "{$story_id}/" : '');
+    
+    $bridge_story = fetch_via_reference_bridge($story_url, $username . (!empty($story_id) ? "_{$story_id}" : ''), 'story');
+    if ($bridge_story && !empty($bridge_story['media'])) {
+        return $bridge_story;
+    }
+
+    if (strtolower($username) !== 'highlights') {
+        $profile_fallback_url = "https://www.instagram.com/{$username}/";
+        $bridge_story2 = fetch_via_reference_bridge($profile_fallback_url, $username, 'story');
+        if ($bridge_story2 && !empty($bridge_story2['media'])) {
+            return $bridge_story2;
+        }
+    }
+
     $sessions = get_instagram_session_pool();
     if (empty($sessions)) {
-        return json_fail('Instagram Stories require an active Instagram session in config.php.', 403);
+        return null;
     }
+
     
     $mobile_headers = [
         'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -1149,8 +1455,15 @@ if (empty($input_url)) {
     json_fail('Please provide a valid Instagram URL or Username.');
 }
 
+// 0. Clean input url (strip leading type prefixes like "Dp https://...", "reel https://...", "story https://...")
+$input_url = preg_replace('/^(?:dp|reel|reels|story|stories|post|photo|photos|highlight|highlights)\s*[:=\-]?\s*/i', '', $input_url);
+
+// Normalized URL without query parameters for strict regex routing
+$clean_input_for_matching = preg_replace('/[?#].*$/', '', $input_url);
+$clean_input_for_matching = rtrim($clean_input_for_matching, '/');
+
 // 0. High-Speed Shield Cache (10-Minute Instant Response, Saves Accounts & Proxy Bandwidth)
-$cache_key = preg_replace('/[?#].*$/', '', $input_url);
+$cache_key = $clean_input_for_matching;
 $cached_data = get_cached_media($cache_key);
 if ($cached_data) {
     json_success($cached_data);
@@ -1158,7 +1471,7 @@ if ($cached_data) {
 
 // Auto-detect input type
 // 1. Stories & Highlights: instagram.com/stories/username/12345 or /stories/highlights/12345
-if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-]+)(?:\/([0-9]+))?)/i', $input_url, $m)) {
+if (preg_match('/(?:instagram\.com\/)?stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-]+)(?:\/([0-9]+))?)/i', $clean_input_for_matching, $m)) {
     if (!empty($m[1])) {
         $username = 'highlights';
         $story_id = $m[1];
@@ -1176,7 +1489,7 @@ if (preg_match('/instagram\.com\/stories\/(?:highlights\/([0-9]+)|([A-Za-z0-9._-
 }
 
 // 1b. Shared Highlight Shortlink: instagram.com/s/aGlnaGxpZ2h0OjE4...
-if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
+if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $clean_input_for_matching, $m)) {
     $highlight_id = null;
     $b64 = strtr($m[1], '-_', '+/');
     $decoded = base64_decode($b64);
@@ -1209,7 +1522,7 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
 }
 
 // 2. Reels: instagram.com/reel/SHORTCODE or /reels/SHORTCODE
-if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
+if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $clean_input_for_matching, $m)) {
     $shortcode = $m[1];
     if (strtolower($shortcode) !== 'audio') {
         $rapid = fetch_via_rapidapi($input_url);
@@ -1223,7 +1536,7 @@ if (preg_match('/instagram\.com\/(?:reel|reels)\/([A-Za-z0-9_-]+)/i', $input_url
 }
 
 // 3. Posts / Photos: instagram.com/p/SHORTCODE or /tv/SHORTCODE
-if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $input_url, $m)) {
+if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $clean_input_for_matching, $m)) {
     $shortcode = $m[1];
     $rapid = fetch_via_rapidapi($input_url);
     if ($rapid) json_success($rapid, $cache_key);
@@ -1235,8 +1548,8 @@ if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $input_url, $m))
 }
 
 // 4. DP / Profile: @username or instagram.com/username
-if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $input_url, $m) || 
-    preg_match('/instagram\.com\/([A-Za-z0-9._]{1,30})\/?$/i', $input_url, $m)) {
+if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $clean_input_for_matching, $m) || 
+    preg_match('/instagram\.com\/([A-Za-z0-9._]{1,30})$/i', $clean_input_for_matching, $m)) {
     $username = $m[1];
     // Ignore reserved paths
     if (!in_array(strtolower($username), ['explore', 'reels', 'stories', 'direct', 'accounts', 'developer', 'about', 'legal'])) {
@@ -1252,4 +1565,14 @@ if (preg_match('/^@?([A-Za-z0-9._]{1,30})$/', $input_url, $m) ||
     }
 }
 
+// Universal Reference Bridge Fallback for any Instagram links
+if (strpos($input_url, 'instagram.com') !== false) {
+    $universal_bridge = fetch_via_reference_bridge($input_url);
+    if ($universal_bridge && !empty($universal_bridge['media'])) {
+        json_success($universal_bridge, $cache_key);
+    }
+}
+
 json_fail('Please enter a valid Instagram URL (e.g. Reels, DP, Post, or Story link).');
+
+
