@@ -166,74 +166,13 @@ if ($is_preview) {
     }
 }
 
-// 2. Direct Download Execution (Streams binary file with attachment header)
+// 2. Direct Download Execution:
+// Vercel Serverless Functions have a strict 4.5MB response limit (FUNCTION_RESPONSE_PAYLOAD_TOO_LARGE).
+// Any attempt to stream 10MB-30MB video files through Vercel Lambda will crash with HTTP 500.
+// We redirect directly (302) to the pre-signed Meta CDN URL, letting Meta CDN serve the file
+// with 0 Serverless payload and maximum edge speed.
 if (isset($_GET['direct']) && $_GET['direct'] == '1') {
-    while (ob_get_level()) {
-        ob_end_clean();
-    }
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 12);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 90);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-    curl_setopt($ch, CURLOPT_REFERER, 'https://www.instagram.com/');
-
-    $headers_sent = false;
-    $status_ok = false;
-
-    // Only send download attachment headers when a valid 200/206 status is confirmed from CDN
-    curl_setopt($ch, CURLOPT_HEADERFUNCTION, function($curl, $header_line) use (&$headers_sent, &$status_ok, $filename, $mime) {
-        $len = strlen($header_line);
-        if (preg_match('/^HTTP\/[0-9.]+\s+([0-9]{3})/i', $header_line, $m)) {
-            $code = (int)$m[1];
-            if ($code >= 200 && $code < 300) {
-                $status_ok = true;
-            }
-        }
-        $status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        if (($status_ok || ($status >= 200 && $status < 300)) && !$headers_sent) {
-            header('Content-Description: File Transfer');
-            header('Content-Type: ' . $mime);
-            header('Content-Disposition: attachment; filename="' . $filename . '"');
-            header('Content-Transfer-Encoding: binary');
-            header('Expires: 0');
-            header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-            header('Pragma: public');
-            $headers_sent = true;
-        }
-        if ($headers_sent && stripos($header_line, 'content-length:') === 0) {
-            header($header_line);
-        }
-        return $len;
-    });
-
-    // Stream binary chunks directly and flush output to browser to prevent connection hanging
-    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($curl, $data) use (&$headers_sent) {
-        $status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        if ($status >= 200 && $status < 300) {
-            echo $data;
-            if (ob_get_level()) {
-                ob_flush();
-            }
-            flush();
-            return strlen($data);
-        }
-        return strlen($data);
-    });
-
-    curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    // If streaming failed or CDN returned error/403, safely return home with error (never show raw Bad URL hash)
-    if (!$headers_sent || $http_code >= 400) {
-        header('Location: index.php?err=expired');
-        exit;
-    }
+    header('Location: ' . $url);
     exit;
 }
 
