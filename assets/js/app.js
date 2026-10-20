@@ -722,7 +722,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dlBtn = document.createElement('a');
                 dlBtn.href = buildGatewayDownloadUrl(m, 'Item_' + (index + 1), m.type, m.thumbnail);
                 dlBtn.className = 'media-item-dl-btn';
-                dlBtn.setAttribute('target', '_self');
+                dlBtn.setAttribute('target', '_blank');
+                dlBtn.setAttribute('rel', 'opener');
                 const dlBtnFull = m.type === 'video' ? 'Download MP4' : 'Download JPG';
                 const dlBtnMid = 'Download';
                 const dlBtnShort = m.type === 'video' ? 'MP4' : 'JPG';
@@ -780,7 +781,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const btn = document.createElement('a');
             btn.href = buildGatewayDownloadUrl(singleItem, data.shortcode || data.username || 'Media', singleItem.type, singleItem.thumbnail || data.thumbnail);
             btn.className = 'btn-download-main';
-            btn.setAttribute('target', '_self');
+            btn.setAttribute('target', '_blank');
+            btn.setAttribute('rel', 'opener');
             const iconSvg = singleItem.type === 'video' 
                 ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
                 : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
@@ -2167,6 +2169,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             });
+        }
+    }
+
+    // Auto-clean searchbar when returning to homepage
+    if (window.location.search.includes('reset=1') || sessionStorage.getItem('instago_reset_search') === '1') {
+        sessionStorage.removeItem('instago_reset_search');
+        if (typeof clearResultsAndErrors === 'function') {
+            clearResultsAndErrors();
+        }
+        if (urlInput) {
+            urlInput.value = '';
+        }
+        if (clearBtn) {
+            clearBtn.style.display = 'none';
+        }
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
         }
     }
 

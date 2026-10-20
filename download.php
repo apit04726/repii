@@ -1441,34 +1441,67 @@ $L = $php_i18n[$initial_lang];
                 updateStatusStep(sec);
             }
 
-            // High-Speed Direct Downloader with Single Guaranteed Execution
+            // High-Speed Direct Downloader with Single Guaranteed Execution (No 3rd Tab)
             let downloadFired = false;
-            function executeFileDownload() {
+            let preloadedBlobUrl = null;
+            let preloadPromise = null;
+
+            // Start preloading the video/image in the background immediately as Tab 2 loads
+            if (rawMediaUrl) {
+                preloadPromise = fetch(rawMediaUrl, { mode: 'cors' })
+                    .then(res => {
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        return res.blob();
+                    })
+                    .then(blob => {
+                        preloadedBlobUrl = URL.createObjectURL(blob);
+                        return preloadedBlobUrl;
+                    })
+                    .catch(err => {
+                        console.warn('Preload via blob failed:', err);
+                        return null;
+                    });
+            }
+
+            function triggerBlobDownload(blobUrl) {
+                try {
+                    const dlLink = document.createElement('a');
+                    dlLink.href = blobUrl;
+                    dlLink.setAttribute('download', fileName);
+                    dlLink.style.display = 'none';
+                    document.body.appendChild(dlLink);
+                    dlLink.click();
+                    setTimeout(() => { dlLink.remove(); }, 3000);
+                    return true;
+                } catch(e) {
+                    return false;
+                }
+            }
+
+            async function executeFileDownload() {
                 if (downloadFired) return;
                 downloadFired = true;
 
-                const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) 
-                    || ('ontouchstart' in window) 
-                    || (navigator.maxTouchPoints > 0)
-                    || (window.innerWidth <= 1024);
+                // 1. If already preloaded and ready, trigger instant blob download (0 third tabs)
+                if (preloadedBlobUrl) {
+                    if (triggerBlobDownload(preloadedBlobUrl)) return;
+                }
 
-                if (isMobileOrTablet) {
-                    // Mobile & Tablet: Single clean direct navigation (triggers native Android/iOS download manager exactly once)
-                    window.location.href = directUrl;
-                } else {
-                    // Desktop: Clean anchor download with directUrl
+                // 2. If preload is still in progress, wait up to 3.5s for it to finish
+                if (preloadPromise) {
                     try {
-                        const dlLink = document.createElement('a');
-                        dlLink.href = directUrl;
-                        dlLink.setAttribute('download', fileName);
-                        dlLink.style.display = 'none';
-                        document.body.appendChild(dlLink);
-                        dlLink.click();
-                        setTimeout(() => { dlLink.remove(); }, 1500);
+                        const blobUrl = await Promise.race([
+                            preloadPromise,
+                            new Promise((_, reject) => setTimeout(() => reject('timeout'), 3500))
+                        ]);
+                        if (blobUrl && triggerBlobDownload(blobUrl)) return;
                     } catch(e) {
-                        window.location.href = directUrl;
+                        // Preload timed out or failed
                     }
                 }
+
+                // 3. Fallback: navigate in the SAME tab so it NEVER opens a 3rd tab
+                window.location.href = directUrl;
             }
 
             function triggerAutoDownload() {
@@ -1523,16 +1556,37 @@ $L = $php_i18n[$initial_lang];
                         updateRedirectMsg(redirectSec);
                     } else {
                         clearInterval(redirectInterval);
-                        if (window.opener && !window.opener.closed) {
-                            try {
-                                window.opener.location.href = 'index.php?reset=1';
-                                window.close();
-                                return;
-                            } catch(e) {}
-                        }
-                        window.location.href = 'index.php?reset=1';
+                        returnToSameHomepage();
                     }
                 }, 1000);
+            }
+
+            function returnToSameHomepage(e) {
+                if (e && typeof e.preventDefault === 'function') e.preventDefault();
+                try {
+                    sessionStorage.setItem('instago_reset_search', '1');
+                    localStorage.setItem('instago_reset_search_ts', Date.now().toString());
+                } catch(err) {}
+
+                if (window.opener && !window.opener.closed) {
+                    try {
+                        window.opener.location.href = 'index.php?reset=1';
+                        window.opener.focus();
+                        window.close();
+                        return;
+                    } catch(err) {
+                        try {
+                            window.opener.focus();
+                            window.close();
+                            return;
+                        } catch(err2) {}
+                    }
+                }
+
+                window.close();
+                setTimeout(() => {
+                    window.location.href = 'index.php?reset=1';
+                }, 200);
             }
 
             // High Precision 60fps Animation Loop
@@ -1578,8 +1632,20 @@ $L = $php_i18n[$initial_lang];
             });
 
             manualTriggerLink.addEventListener('click', function(e) {
+                e.preventDefault();
                 downloadFired = false;
+                executeFileDownload();
             });
+
+            const returnBtn = document.querySelector('.btn-return');
+            if (returnBtn) {
+                returnBtn.addEventListener('click', returnToSameHomepage);
+            }
+
+            const brandBox = document.querySelector('.brand-box');
+            if (brandBox) {
+                brandBox.addEventListener('click', returnToSameHomepage);
+            }
 
         })();
     </script>
