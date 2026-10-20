@@ -506,6 +506,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoElem.setAttribute('playsinline', 'true');
                 videoElem.setAttribute('webkit-playsinline', 'true');
                 videoElem.preload = 'metadata';
+                videoElem.muted = false;
+                videoElem.volume = 1.0;
                 if (thumbSrc && thumbSrc !== mediaSrc) videoElem.poster = thumbSrc;
                 videoElem.src = mediaSrc;
 

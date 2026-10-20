@@ -19,35 +19,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // IP-based Rate Limiter (Max 60 requests/min to protect Instagram sessions & prevent DoS)
-$client_ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-if (strpos($client_ip, ',') !== false) {
-    $client_ip = trim(explode(',', $client_ip)[0]);
-}
-$client_ip = preg_replace('/[^a-zA-Z0-9_.:-]/', '', $client_ip);
-$rate_file = sys_get_temp_dir() . '/instago_rl_' . md5($client_ip) . '.json';
-$now = time();
-$timestamps = [];
-if (file_exists($rate_file)) {
-    $raw_rate = @file_get_contents($rate_file);
-    if ($raw_rate) {
-        $parsed = json_decode($raw_rate, true);
-        if (is_array($parsed)) {
-            $timestamps = array_filter($parsed, function($t) use ($now) {
-                return ($now - $t) < 60;
-            });
+if (php_sapi_name() !== 'cli' && !defined('INSTAGO_API_NO_DISPATCH')) {
+    $client_ip = $_SERVER['HTTP_CF_CONNECTING_IP'] ?? $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+    if (strpos($client_ip, ',') !== false) {
+        $client_ip = trim(explode(',', $client_ip)[0]);
+    }
+    $client_ip = preg_replace('/[^a-zA-Z0-9_.:-]/', '', $client_ip);
+    $rate_file = sys_get_temp_dir() . '/instago_rl_' . md5($client_ip) . '.json';
+    $now = time();
+    $timestamps = [];
+    if (file_exists($rate_file)) {
+        $raw_rate = @file_get_contents($rate_file);
+        if ($raw_rate) {
+            $parsed = json_decode($raw_rate, true);
+            if (is_array($parsed)) {
+                $timestamps = array_filter($parsed, function($t) use ($now) {
+                    return ($now - $t) < 60;
+                });
+            }
         }
     }
+    if (count($timestamps) >= 60) {
+        http_response_code(429);
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Rate limit exceeded. Too many requests. Please wait a minute and try again.'
+        ], JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    $timestamps[] = $now;
+    @file_put_contents($rate_file, json_encode($timestamps), LOCK_EX);
 }
-if (count($timestamps) >= 60) {
-    http_response_code(429);
-    echo json_encode([
-        'status' => 'error',
-        'message' => 'Rate limit exceeded. Too many requests. Please wait a minute and try again.'
-    ], JSON_UNESCAPED_SLASHES);
-    exit;
-}
-$timestamps[] = $now;
-@file_put_contents($rate_file, json_encode($timestamps), LOCK_EX);
+
 
 require_once __DIR__ . '/config.php';
 
@@ -63,10 +66,10 @@ function get_cached_media($key) {
             $content = @file_get_contents($cache_file);
             if ($content) {
                 $decoded = json_decode($content, true);
-                // Sanity check: Invalidate and purge if a Reel URL was improperly cached as a photo post or has no valid video or bad signature
+                // Sanity check: Invalidate and purge if a Reel URL was improperly cached as a photo post or has no valid video or bad signature or silent DASH stream
                 if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $clean_key)) {
                     $dl = $decoded['download_url'] ?? '';
-                    if (($decoded['type'] ?? '') !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false) {
+                    if (($decoded['type'] ?? '') !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false || strpos($dl, 'dash_baseline_1_v1') !== false) {
                         @unlink($cache_file);
                         return null;
                     }
@@ -82,10 +85,10 @@ function get_cached_media($key) {
 
 function set_cached_media($key, $data) {
     if (!empty($data) && is_array($data) && (!empty($data['download_url']) || !empty($data['media']))) {
-        // Guard: Never cache invalid, incomplete or corrupted reel video
+        // Guard: Never cache invalid, incomplete, corrupted or silent DASH reel video
         if (preg_match('/instagram\.com\/(?:reel|reels)\//i', $key)) {
             $dl = $data['download_url'] ?? '';
-            if (($data['type'] ?? '') !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false) {
+            if (($data['type'] ?? '') !== 'reel' || empty($dl) || strpos($dl, '.mp4') === false || strpos($dl, 'oh=') === false || strpos($dl, 'oe=') === false || strpos($dl, 'u0026') !== false || strpos($dl, 'dash_baseline_1_v1') !== false) {
                 return;
             }
         }
@@ -436,6 +439,124 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
         return $href;
     };
 
+    // Engine 0: SnapSave Public Reference Scraper (Guarantees Full Audio / Progressive Sound MP4)
+    if ($type !== 'profile' && $type !== 'dp') {
+        $ch_ss = curl_init('https://snapsave.app/action.php');
+        curl_setopt($ch_ss, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_ss, CURLOPT_POST, true);
+        curl_setopt($ch_ss, CURLOPT_POSTFIELDS, http_build_query(['url' => $clean_url]));
+        curl_setopt($ch_ss, CURLOPT_HTTPHEADER, [
+            'Origin: https://snapsave.app',
+            'Referer: https://snapsave.app/',
+            'X-Requested-With: XMLHttpRequest',
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        ]);
+        curl_setopt($ch_ss, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch_ss, CURLOPT_CONNECTTIMEOUT, 6);
+        curl_setopt($ch_ss, CURLOPT_TIMEOUT, 12);
+        $res_ss = curl_exec($ch_ss);
+        $code_ss = curl_getinfo($ch_ss, CURLINFO_HTTP_CODE);
+        curl_close($ch_ss);
+
+        if ($code_ss === 200 && !empty($res_ss) && preg_match('/decodeURIComponent\(escape\(r\)\)\}\s*\(\s*"([^"]+)"\s*,\s*([0-9]+)\s*,\s*"([^"]+)"\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*\)/s', $res_ss, $sm)) {
+            $h_str = $sm[1];
+            $n_str = $sm[3];
+            $t_num = (int)$sm[4];
+            $e_num = (int)$sm[5];
+
+            $charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/";
+            $e68c_fn = function($d, $e_val, $f_val) use ($charset) {
+                $h_sub = substr($charset, 0, $e_val);
+                $i_sub = substr($charset, 0, $f_val);
+                $len = strlen($d);
+                $j = 0;
+                for ($k = 0; $k < $len; $k++) {
+                    $char = $d[$len - 1 - $k];
+                    $idx = strpos($h_sub, $char);
+                    if ($idx !== false) {
+                        $j += $idx * pow($e_val, $k);
+                    }
+                }
+                $k_res = '';
+                while ($j > 0) {
+                    $k_res = $i_sub[$j % $f_val] . $k_res;
+                    $j = floor($j / $f_val);
+                }
+                return !empty($k_res) ? $k_res : '0';
+            };
+
+            $r_dec = '';
+            $h_len = strlen($h_str);
+            $split_c = $n_str[$e_num];
+            $i_ptr = 0;
+            while ($i_ptr < $h_len) {
+                $s_part = '';
+                while ($i_ptr < $h_len && $h_str[$i_ptr] !== $split_c) {
+                    $s_part .= $h_str[$i_ptr];
+                    $i_ptr++;
+                }
+                $i_ptr++;
+                for ($j = 0; $j < strlen($n_str); $j++) {
+                    $s_part = str_replace($n_str[$j], (string)$j, $s_part);
+                }
+                $val = (int)$e68c_fn($s_part, $e_num, 10) - $t_num;
+                if ($val > 0) $r_dec .= chr($val);
+            }
+
+            $unpacked_html = stripslashes(urldecode($r_dec));
+            if (!empty($unpacked_html)) {
+                $snapsave_media = [];
+                preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $unpacked_html, $sm_a);
+                preg_match_all('/<img[^>]+src="([^"]+)"/i', $unpacked_html, $sm_img);
+                $snap_thumb = !empty($sm_img[1][0]) ? $decode_jwt_token($sm_img[1][0]) : '';
+
+                foreach ($sm_a[1] as $a_idx => $href) {
+                    $label = strip_tags($sm_a[2][$a_idx] ?? '');
+                    if (stripos($label, 'download with app') !== false || stripos($label, 'more videos') !== false || $href === '/') continue;
+                    if (strpos($href, 'token=') !== false || strpos($href, 'cdninstagram.com') !== false || strpos($href, 'fbcdn.net') !== false) {
+                        $cdn_url = $decode_jwt_token($href);
+                        if (strpos($cdn_url, '/') === 0) continue;
+                        $is_vid = (stripos($label, 'video') !== false || stripos($cdn_url, '.mp4') !== false);
+                        $num = count($snapsave_media) + 1;
+                        $snapsave_media[] = [
+                            'type' => $is_vid ? 'video' : 'image',
+                            'quality' => ($type === 'story' || strpos($insta_url, '/stories/') !== false)
+                                ? ($is_vid ? "Story #{$num} (Full HD with Sound)" : "Story #{$num} (HD Photo)")
+                                : ($is_vid ? "Full HD 1080p (MP4 with Sound)" : "Original HD Photo (JPG)"),
+                            'title' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? "Story #{$num}" : ($is_vid ? "HD Video" : "HD Photo"),
+                            'thumbnail' => $snap_thumb ?: $cdn_url,
+                            'preview_url' => $is_vid ? $cdn_url : ($snap_thumb ?: $cdn_url),
+                            'url' => $cdn_url,
+                            'proxy_url' => 'download.php?type=' . ($is_vid ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($snap_thumb ? '&thumb=' . urlencode(base64_encode($snap_thumb)) : '') . '&url=' . base64_encode($cdn_url)
+                        ];
+                    }
+                }
+
+                // If any videos found in results, remove duplicate images so it's a pure video with audio!
+                $has_vid = false;
+                foreach ($snapsave_media as $sm_item) {
+                    if ($sm_item['type'] === 'video') { $has_vid = true; break; }
+                }
+                if ($has_vid && count($snapsave_media) > 1 && $type !== 'story') {
+                    $snapsave_media = array_values(array_filter($snapsave_media, function($m) { return $m['type'] === 'video'; }));
+                }
+
+                if (!empty($snapsave_media)) {
+                    $first_m = $snapsave_media[0];
+                    return [
+                        'type' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? 'story' : ($first_m['type'] === 'video' ? 'reel' : 'post'),
+                        'shortcode' => $identifier,
+                        'author' => 'Instagram User',
+                        'caption' => ($type === 'story' || strpos($insta_url, '/stories/') !== false) ? count($snapsave_media) . ' Active Stories found' : '✨ Instagram Video with Sound (Ready to Download)',
+                        'thumbnail' => $first_m['thumbnail'],
+                        'download_url' => $first_m['url'],
+                        'media' => $snapsave_media
+                    ];
+                }
+            }
+        }
+    }
+
     // Engine A: InDown.net AJAX Bridge (Public Reference Scraper - Reels, Posts, Stories, Highlights, DP)
     if ($type === 'profile' || $type === 'dp') {
         $vt = 'profile';
@@ -546,6 +667,7 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                     preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $item_html, $m_a);
                     $video_url = '';
                     $image_url = '';
+                    $audio_url = '';
                     foreach ($m_a[1] as $a_idx => $href) {
                         if ($href === '/' || strpos($href, 'back-home') !== false) continue;
                         $label = strip_tags($m_a[2][$a_idx] ?? '');
@@ -554,7 +676,9 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                         if (strpos($url, '/') === 0) continue;
                         if ($is_story_mode && stripos($label, 'Avatar') !== false) continue;
 
-                        if (stripos($label, 'Video') !== false || stripos($url, '.mp4') !== false) {
+                        if (stripos($label, 'Audio') !== false || stripos($url, '.mp3') !== false || stripos($url, '.m4a') !== false) {
+                            $audio_url = $url;
+                        } elseif (stripos($label, 'Video') !== false || stripos($url, '.mp4') !== false) {
                             $video_url = $url;
                         } elseif (stripos($label, 'Image') !== false || stripos($url, '.jpg') !== false || stripos($url, '.jpeg') !== false) {
                             $image_url = $url;
@@ -571,17 +695,19 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                             ? ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num . '_thumb') . '&url=' . base64_encode($thumb))
                             : ($is_vid ? '' : ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . '&url=' . base64_encode($best_url)));
 
-                        $media_list[] = [
+                        $item_entry = [
                             'type' => $is_vid ? 'video' : 'image',
                             'quality' => $is_story_mode
-                                ? ($is_vid ? "Story #{$num} (Full HD MP4)" : "Story #{$num} (HD Photo)")
-                                : ($is_vid ? "Full HD 1080p (MP4)" : "Original HD Photo (JPG)"),
+                                ? ($is_vid ? "Story #{$num} (Video with Sound)" : (!empty($audio_url) ? "Story #{$num} (Photo with Music 🎵)" : "Story #{$num} (HD Photo)"))
+                                : ($is_vid ? "Full HD 1080p (Video with Sound)" : "Original HD Photo (JPG)"),
                             'title' => $is_story_mode ? "Story #{$num}" : ($is_vid ? "HD Video" : "HD Photo"),
                             'thumbnail' => $preview_thumb ?: ($thumb ?: $best_url),
                             'preview_url' => $is_vid ? $best_url : ($preview_thumb ?: $best_url),
                             'url' => $best_url,
                             'proxy_url' => 'download.php?type=' . ($is_vid ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($best_url)
                         ];
+
+                        $media_list[] = $item_entry;
                     }
                 }
             }
@@ -603,17 +729,18 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                         $preview_thumb = !empty($thumb)
                             ? ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num . '_thumb') . '&url=' . base64_encode($thumb))
                             : ($is_video ? '' : ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . '&url=' . base64_encode($cdn_url)));
-                        $media_list[] = [
+                        $fallback_entry = [
                             'type' => $is_video ? 'video' : 'image',
                             'quality' => $is_story_mode
-                                ? ($is_video ? "Story #{$num} (Full HD MP4)" : "Story #{$num} (HD Photo)")
-                                : ($is_video ? "Full HD 1080p (MP4)" : "Original HD Photo (JPG)"),
+                                ? ($is_video ? "Story #{$num} (Video with Sound)" : "Story #{$num} (HD Photo)")
+                                : ($is_video ? "Full HD 1080p (Video with Sound)" : "Original HD Photo (JPG)"),
                             'title' => $is_story_mode ? "Story #{$num}" : ($is_video ? "HD Video" : "HD Photo"),
                             'thumbnail' => $preview_thumb ?: ($thumb ?: $cdn_url),
                             'preview_url' => $is_video ? $cdn_url : ($preview_thumb ?: $cdn_url),
                             'url' => $cdn_url,
                             'proxy_url' => 'download.php?type=' . ($is_video ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . ($identifier ?: 'media') . '_' . $num) . ($thumb ? '&thumb=' . urlencode(base64_encode($thumb)) : '') . '&url=' . base64_encode($cdn_url)
                         ];
+                        $media_list[] = $fallback_entry;
                     }
                 }
             }
@@ -629,6 +756,12 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                     }
                 }
                 $is_story = ($type === 'story' || strpos($insta_url, '/stories/') !== false);
+                if ($has_video && !$is_story) {
+                    $media_list = array_values(array_filter($media_list, function($m) { return $m['type'] === 'video'; }));
+                    if (!empty($media_list)) {
+                        $best_dl = $media_list[0]['url'];
+                    }
+                }
                 return [
                     'type' => $is_story ? 'story' : ($has_video ? 'reel' : 'post'),
                     'shortcode' => $identifier,
@@ -1429,23 +1562,28 @@ function fetch_instagram_story($username, $story_id = null) {
                     $author = $item['user']['username'] ?? $username;
                     $full_name = $item['user']['full_name'] ?? '';
 
+                    $music_url = $item['story_music_stickers'][0]['music_asset_info']['progressive_download_url'] ?? '';
+                    $music_title = $item['story_music_stickers'][0]['music_asset_info']['title'] ?? '';
+
                     $media_list = [];
                     if ($is_video && !empty($video_url)) {
-                        $media_list[] = [
+                        $media_item = [
                             'type' => 'video',
-                            'quality' => 'Story Video HD (MP4)',
+                            'quality' => 'Story Video HD (MP4 with Sound)',
                             'thumbnail' => $thumb_url,
                             'url' => $video_url,
                             'proxy_url' => 'download.php?type=video&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id) . '&url=' . base64_encode($video_url)
                         ];
+                        $media_list[] = $media_item;
                     } else if (!empty($thumb_url)) {
-                        $media_list[] = [
+                        $media_item = [
                             'type' => 'image',
                             'quality' => 'Story Photo HD (JPG)',
                             'thumbnail' => $thumb_url,
                             'url' => $thumb_url,
                             'proxy_url' => 'download.php?type=image&name=' . urlencode('InstaGo_Story_' . $author . '_' . $story_id . '_img') . '&url=' . base64_encode($thumb_url)
                         ];
+                        $media_list[] = $media_item;
                     }
 
                     return [
@@ -1535,19 +1673,24 @@ function parse_story_items($items, $username) {
         $s_id = $s_item['pk'] ?? $s_item['id'] ?? $num;
         $label_prefix = $is_highlight ? 'Highlight' : 'Story';
         $thumb_candidate = $s_item['image_versions2']['candidates'][0]['url'] ?? '';
+
+        $music_url = $s_item['story_music_stickers'][0]['music_asset_info']['progressive_download_url'] ?? '';
+        $music_title = $s_item['story_music_stickers'][0]['music_asset_info']['title'] ?? '';
+
         if (!empty($s_item['video_versions'])) {
             $v_url = $s_item['video_versions'][0]['url'];
-            $media_list[] = [
+            $entry = [
                 'type' => 'video',
-                'quality' => "{$label_prefix} {$num} (Video MP4)",
+                'quality' => "{$label_prefix} {$num} (Video with Sound)",
                 'title' => "{$label_prefix} #{$num}",
                 'thumbnail' => $thumb_candidate ?: $v_url,
                 'url' => $v_url,
                 'proxy_url' => 'download.php?type=video&name=' . urlencode("InstaGo_{$label_prefix}_{$username}_{$s_id}") . '&url=' . base64_encode($v_url)
             ];
+            $media_list[] = $entry;
         } else if (!empty($thumb_candidate) || !empty($s_item['image_versions2']['candidates'])) {
             $i_url = $thumb_candidate ?: $s_item['image_versions2']['candidates'][0]['url'];
-            $media_list[] = [
+            $entry = [
                 'type' => 'image',
                 'quality' => "{$label_prefix} {$num} (Photo JPG)",
                 'title' => "{$label_prefix} #{$num}",
@@ -1555,6 +1698,7 @@ function parse_story_items($items, $username) {
                 'url' => $i_url,
                 'proxy_url' => 'download.php?type=image&name=' . urlencode("InstaGo_{$label_prefix}_{$username}_{$s_id}") . '&url=' . base64_encode($i_url)
             ];
+            $media_list[] = $entry;
         }
     }
 

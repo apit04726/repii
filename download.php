@@ -167,14 +167,51 @@ if ($is_preview) {
 }
 
 // 2. Direct Download Execution:
-// Vercel Serverless Functions have a strict 4.5MB response limit (FUNCTION_RESPONSE_PAYLOAD_TOO_LARGE).
-// Any attempt to stream 10MB-30MB video files through Vercel Lambda will crash with HTTP 500.
-// We redirect directly (302) to the pre-signed Meta CDN URL, letting Meta CDN serve the file
-// with 0 Serverless payload and maximum edge speed.
+// Stream file with Content-Disposition: attachment so that mobile & desktop devices save the file directly
+// to the Downloads/Gallery folder with 100% full audio/voice/music, instead of opening a muted browser player!
 if (isset($_GET['direct']) && $_GET['direct'] == '1') {
+    $is_vercel = !empty($_ENV['VERCEL']) || !empty($_SERVER['VERCEL']);
+    
+    // Always stream directly with attachment headers so file saves to device gallery/downloads with full audio/song!
+    $should_stream = true;
+    if ($is_vercel && $type === 'video') {
+        $ch_h = curl_init($url);
+        curl_setopt($ch_h, CURLOPT_NOBODY, true);
+        curl_setopt($ch_h, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch_h, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch_h, CURLOPT_TIMEOUT, 3);
+        curl_exec($ch_h);
+        $cl = curl_getinfo($ch_h, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
+        curl_close($ch_h);
+        if ($cl > 4700000) {
+            $should_stream = false;
+        }
+    }
+
+    if ($should_stream) {
+        while (ob_get_level()) ob_end_clean();
+        header('Content-Type: ' . $mime);
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Access-Control-Allow-Origin: *');
+        header('Cache-Control: public, must-revalidate, max-age=0');
+        header('Pragma: public');
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 1048576);
+        curl_exec($ch);
+        curl_close($ch);
+        exit;
+    }
+
     header('Location: ' . $url);
     exit;
 }
+
 
 // 3. Render 5-Second Countdown Gateway Page (Smart, Professional, 100% Responsive for All Devices)
 $direct_params = $_GET;
