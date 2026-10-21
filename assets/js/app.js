@@ -520,18 +520,176 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
-                // Prevent unwanted auto-scroll & mobile keyboard/autofill popup on video tap/play
-                const dismissLingeringFocus = () => {
-                    if (urlInput) urlInput.blur();
-                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
-                        document.activeElement.blur();
+                // Dismiss search input focus if active when video starts playing
+                videoElem.addEventListener('play', () => {
+                    if (urlInput && document.activeElement === urlInput) {
+                        urlInput.blur();
+                    }
+                });
+
+                // Check if device is mobile or tablet — Desktop stays 100% native as requested
+                const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+                if (!isMobileOrTablet) {
+                    // Desktop: Pure native player controls, untouched
+                    mediaContainer.appendChild(videoElem);
+                    return;
+                }
+
+                // Mobile & Tablet: Bottom-right touch interceptor directly over the 3-dots icon
+                const touchInterceptor = document.createElement('div');
+                touchInterceptor.className = 'native-dots-touch-target';
+                touchInterceptor.title = 'Options';
+                touchInterceptor.setAttribute('role', 'button');
+                touchInterceptor.setAttribute('aria-label', 'Video Options');
+
+                // Video Options Popup Menu for Mobile & Tablet
+                const dlUrl = (typeof buildGatewayDownloadUrl === 'function')
+                    ? buildGatewayDownloadUrl(item, data.shortcode || data.username || 'Media', 'video', thumbSrc)
+                    : (item.download_url || item.url || data.download_url || mediaSrc);
+
+                const optionsMenu = document.createElement('div');
+                optionsMenu.className = 'video-options-menu';
+                optionsMenu.innerHTML = `
+                    <div class="video-options-header">
+                        <span>⚡ Video Options</span>
+                        <button type="button" class="video-options-close" aria-label="Close">&times;</button>
+                    </div>
+                    <div class="video-options-body">
+                        <div class="video-option-row">
+                            <span class="video-option-label">Playback Speed:</span>
+                            <div class="video-speed-chips">
+                                <button type="button" class="speed-chip" data-speed="0.5">0.5x</button>
+                                <button type="button" class="speed-chip" data-speed="0.75">0.75x</button>
+                                <button type="button" class="speed-chip active" data-speed="1">1x</button>
+                                <button type="button" class="speed-chip" data-speed="1.25">1.25x</button>
+                                <button type="button" class="speed-chip" data-speed="1.5">1.5x</button>
+                                <button type="button" class="speed-chip" data-speed="2">2x</button>
+                            </div>
+                        </div>
+                        <div class="video-option-actions">
+                            <button type="button" class="video-action-btn pip-action-btn">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="10" width="8" height="6" rx="1"/></svg>
+                                <span>Mini Player (PiP)</span>
+                            </button>
+                            <button type="button" class="video-action-btn loop-action-btn">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                                <span class="loop-text">Loop: Off</span>
+                            </button>
+                            <a href="${dlUrl}" target="_blank" rel="opener" class="video-action-btn download-action-btn">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                <span>Download MP4</span>
+                            </a>
+                        </div>
+                    </div>
+                `;
+
+                let isMenuOpen = false;
+                let ignoreOutsideEventsUntil = 0;
+
+                const openMenu = () => {
+                    isMenuOpen = true;
+                    optionsMenu.classList.add('active');
+                    ignoreOutsideEventsUntil = Date.now() + 400;
+                };
+
+                const closeMenu = () => {
+                    isMenuOpen = false;
+                    optionsMenu.classList.remove('active');
+                };
+
+                const toggleMenu = (e) => {
+                    if (e) {
+                        e.stopPropagation();
+                    }
+                    if (isMenuOpen) {
+                        closeMenu();
+                    } else {
+                        openMenu();
                     }
                 };
-                videoElem.addEventListener('play', dismissLingeringFocus);
-                videoElem.addEventListener('click', dismissLingeringFocus);
-                videoElem.addEventListener('touchstart', dismissLingeringFocus, { passive: true });
+
+                // Reliable mobile touch handling on 3-dots
+                touchInterceptor.addEventListener('touchend', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleMenu(e);
+                });
+
+                touchInterceptor.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    toggleMenu(e);
+                });
+
+                optionsMenu.querySelector('.video-options-close').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    closeMenu();
+                });
+
+                // Speed chips
+                optionsMenu.querySelectorAll('.speed-chip').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        optionsMenu.querySelectorAll('.speed-chip').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        const speed = parseFloat(btn.getAttribute('data-speed')) || 1;
+                        videoElem.playbackRate = speed;
+                    });
+                });
+
+                // PiP button
+                const pipBtn = optionsMenu.querySelector('.pip-action-btn');
+                if (document.pictureInPictureEnabled || videoElem.webkitSupportsPresentationMode) {
+                    pipBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        try {
+                            if (document.pictureInPictureElement) {
+                                await document.exitPictureInPicture();
+                            } else if (videoElem.requestPictureInPicture) {
+                                await videoElem.requestPictureInPicture();
+                            } else if (videoElem.webkitSetPresentationMode) {
+                                videoElem.webkitSetPresentationMode('picture-in-picture');
+                            }
+                            closeMenu();
+                        } catch (err) {}
+                    });
+                } else {
+                    pipBtn.style.display = 'none';
+                }
+
+                // Loop toggle
+                const loopBtn = optionsMenu.querySelector('.loop-action-btn');
+                const loopText = optionsMenu.querySelector('.loop-text');
+                loopBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    videoElem.loop = !videoElem.loop;
+                    loopBtn.classList.toggle('active', videoElem.loop);
+                    loopText.textContent = videoElem.loop ? 'Loop: On' : 'Loop: Off';
+                });
+
+                // Download action inside options
+                const dlBtn = optionsMenu.querySelector('.download-action-btn');
+                if (dlBtn) {
+                    dlBtn.addEventListener('click', () => {
+                        setTimeout(closeMenu, 400);
+                    });
+                }
+
+                // Dismiss on outside tap with debounce guard
+                const handleOutsideTap = (e) => {
+                    if (!isMenuOpen) return;
+                    if (Date.now() < ignoreOutsideEventsUntil) return;
+                    if (optionsMenu.contains(e.target) || touchInterceptor.contains(e.target)) {
+                        return;
+                    }
+                    closeMenu();
+                };
+                document.addEventListener('touchend', handleOutsideTap, { passive: true });
+                document.addEventListener('click', handleOutsideTap);
 
                 mediaContainer.appendChild(videoElem);
+                mediaContainer.appendChild(touchInterceptor);
+                mediaContainer.appendChild(optionsMenu);
             } else {
                 const imgElem = document.createElement('img');
                 imgElem.className = 'media-preview-img';
