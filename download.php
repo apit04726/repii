@@ -34,8 +34,25 @@ function decode_media_url($raw) {
     }
     
     $decoded = @base64_decode($normalized, true);
-    if ($decoded && preg_match('/^https?:\/\//i', $decoded)) {
-        return $decoded;
+    if ($decoded) {
+        if (preg_match('/^https?:\/\//i', $decoded)) {
+            return $decoded;
+        }
+        // Handle wrapped/double-encoded download.php links: download.php?url=... or thumb=...
+        if (strpos($decoded, 'download.php') !== false || strpos($decoded, 'url=') !== false || strpos($decoded, 'thumb=') !== false) {
+            $query = parse_url($decoded, PHP_URL_QUERY);
+            if ($query) {
+                parse_str($query, $params);
+                if (!empty($params['url'])) {
+                    $unwrapped = decode_media_url($params['url']);
+                    if ($unwrapped) return $unwrapped;
+                }
+                if (!empty($params['thumb'])) {
+                    $unwrapped = decode_media_url($params['thumb']);
+                    if ($unwrapped) return $unwrapped;
+                }
+            }
+        }
     }
     
     // Handle double urlencoding
@@ -208,21 +225,51 @@ if (empty($thumb_url) && ($type === 'image' || $type === 'dp')) {
 // 1. Preview mode (used for in-page DP avatar and thumbnail streaming with CORS)
 $is_preview = isset($_GET['preview']) || isset($_GET['view']);
 if ($is_preview) {
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-    curl_setopt($ch, CURLOPT_REFERER, 'https://www.instagram.com/');
-    $img_data = curl_exec($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    $preview_target = !empty($thumb_url) ? $thumb_url : $url;
+    
+    $fetch_image_bytes = function($target_url, $use_proxy = false) {
+        if (empty($target_url)) return null;
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $target_url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            'Accept-Language: en-US,en;q=0.9',
+            'Sec-Fetch-Dest: image',
+            'Sec-Fetch-Mode: no-cors',
+            'Sec-Fetch-Site: cross-site',
+            'Referer: https://www.instagram.com/'
+        ]);
+        if ($use_proxy && defined('USE_PROXY') && USE_PROXY) {
+            $proxy_addr = defined('PROXY_URL') ? PROXY_URL : '';
+            if (empty($proxy_addr) && defined('PROXY_POOL') && is_array(PROXY_POOL) && !empty(PROXY_POOL)) {
+                $proxy_addr = PROXY_POOL[0];
+            }
+            if ($proxy_addr) {
+                curl_setopt($ch, CURLOPT_PROXY, $proxy_addr);
+            }
+        }
+        $data = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return ($code === 200 && !empty($data)) ? $data : null;
+    };
 
-    if ($http_code === 200 && !empty($img_data)) {
+    // Attempt 1: Direct fetch with browser headers
+    $img_data = $fetch_image_bytes($preview_target, false);
+    // Attempt 2: If Meta CDN blocks datacenter IP with 403, retry via residential proxy
+    if (!$img_data && defined('USE_PROXY') && USE_PROXY) {
+        $img_data = $fetch_image_bytes($preview_target, true);
+    }
+
+    if (!empty($img_data)) {
+        while (ob_get_level()) ob_end_clean();
         header('Content-Type: ' . $mime);
         header('Content-Disposition: inline');
         header('Access-Control-Allow-Origin: *');
@@ -231,6 +278,14 @@ if ($is_preview) {
         echo $img_data;
         exit;
     }
+
+    // Attempt 3: Stylized SVG avatar guarantee (Never broken, 100% reliable)
+    while (ob_get_level()) ob_end_clean();
+    $initial = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $custom_name ?: 'I'), 0, 1)) ?: 'I';
+    header('Content-Type: image/svg+xml');
+    header('Cache-Control: public, max-age=86400');
+    echo '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 100 100"><defs><linearGradient id="ig" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#833ab4"/><stop offset="50%" stop-color="#fd1d1d"/><stop offset="100%" stop-color="#fcb045"/></linearGradient></defs><rect width="100" height="100" rx="20" fill="url(#ig)"/><circle cx="50" cy="42" r="18" fill="#ffffff" opacity="0.95"/><path d="M22 84 C24 64, 76 64, 78 84" fill="#ffffff" opacity="0.95"/><text x="50" y="47" font-family="sans-serif" font-size="14" font-weight="bold" fill="#e1306c" text-anchor="middle">' . htmlspecialchars($initial) . '</text></svg>';
+    exit;
 }
 
 // 2. Direct Download Execution:
@@ -1250,17 +1305,19 @@ $L = $php_i18n[$initial_lang];
             <!-- Media Preview Card -->
             <div class="media-preview-card">
                 <div class="media-thumb-wrapper">
-                    <?php if (!empty($thumb_url)): ?>
-                        <img src="<?= htmlspecialchars($thumb_url) ?>" 
-                             alt="Media Preview" 
-                             class="media-thumb-img" 
-                             referrerpolicy="no-referrer"
-                             onerror="this.onerror=null; this.src='download.php?preview=1&url=<?= urlencode($raw_thumb ?: $raw_url) ?>';">
-                    <?php else: ?>
-                        <div class="media-thumb-placeholder">
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>
-                        </div>
-                    <?php endif; ?>
+                    <?php 
+                        $preview_target_url = !empty($thumb_url) ? $thumb_url : $url;
+                        $proxy_preview_src = 'download.php?preview=1&url=' . urlencode(base64_encode($preview_target_url)) . '&name=' . urlencode($clean_name);
+                        $initial_char = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $clean_name ?: 'I'), 0, 1)) ?: 'I';
+                        $inline_svg_fallback = 'data:image/svg+xml;utf8,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 100 100"><defs><linearGradient id="ig" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#833ab4"/><stop offset="50%" stop-color="#fd1d1d"/><stop offset="100%" stop-color="#fcb045"/></linearGradient></defs><rect width="100" height="100" rx="20" fill="url(#ig)"/><circle cx="50" cy="42" r="18" fill="#ffffff" opacity="0.95"/><path d="M22 84 C24 64, 76 64, 78 84" fill="#ffffff" opacity="0.95"/><text x="50" y="47" font-family="sans-serif" font-size="14" font-weight="bold" fill="#e1306c" text-anchor="middle">' . $initial_char . '</text></svg>');
+                    ?>
+                    <img src="<?= htmlspecialchars($proxy_preview_src) ?>" 
+                         data-direct-src="<?= htmlspecialchars($preview_target_url) ?>"
+                         data-fallback-svg="<?= $inline_svg_fallback ?>"
+                         alt="<?= htmlspecialchars($filename) ?>" 
+                         class="media-thumb-img" 
+                         referrerpolicy="no-referrer"
+                         onerror="if(this.getAttribute('data-tried') !== 'direct' && this.getAttribute('data-direct-src')){ this.setAttribute('data-tried', 'direct'); this.src = this.getAttribute('data-direct-src'); } else { this.onerror = null; this.src = this.getAttribute('data-fallback-svg'); }">
                     <span class="media-type-pill notranslate" translate="no"><?= htmlspecialchars(strtoupper($type)) ?></span>
                 </div>
                 <div class="media-info">

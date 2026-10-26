@@ -146,6 +146,9 @@ function json_success($data, $cache_key = null) {
         if (!empty($data['download_url']) && function_exists('generate_secure_proxy_url')) {
             $thumb = $data['thumbnail'] ?? '';
             $data['proxy_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb);
+            if ($main_type === 'dp' || !empty($data['preview_url'])) {
+                $data['preview_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb, true);
+            }
         }
     }
     echo json_encode([
@@ -797,8 +800,6 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                 }
                 if ($avatar_url && strpos($avatar_url, '/') !== 0) {
                     $username = $identifier ?: 'instagram_user';
-                    $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($avatar_url);
-                    $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($avatar_url);
                     return [
                         'type' => 'dp',
                         'author' => '@' . ltrim($username, '@'),
@@ -810,17 +811,17 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
                         'posts_count' => 0,
                         'is_verified' => false,
                         'is_private' => false,
-                        'thumbnail' => $preview_url,
-                        'preview_url' => $preview_url,
-                        'download_url' => $proxy_url,
+                        'thumbnail' => $avatar_url,
+                        'preview_url' => $avatar_url,
+                        'download_url' => $avatar_url,
                         'media' => [
                             [
-                                'type' => 'image',
+                                'type' => 'dp',
                                 'quality' => 'Full HD Profile Picture (1080p)',
                                 'url' => $avatar_url,
-                                'thumbnail' => $preview_url,
-                                'preview_url' => $preview_url,
-                                'proxy_url' => $proxy_url
+                                'thumbnail' => $avatar_url,
+                                'preview_url' => $avatar_url,
+                                'download_url' => $avatar_url
                             ]
                         ]
                     ];
@@ -1207,8 +1208,6 @@ function fetch_instagram_dp($username) {
                 if ($user) {
                     $hd_pic = $user['profile_pic_url_hd'] ?? $user['profile_pic_url'] ?? '';
                     if (!empty($hd_pic)) {
-                        $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
-                        $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
                         $dp_author = '@' . ltrim($user['username'] ?? $username, '@');
                         return [
                             'type' => 'dp',
@@ -1221,17 +1220,17 @@ function fetch_instagram_dp($username) {
                             'posts_count' => $user['edge_owner_to_timeline_media']['count'] ?? 0,
                             'is_verified' => $user['is_verified'] ?? false,
                             'is_private' => $user['is_private'] ?? false,
-                            'thumbnail' => $preview_url,
-                            'preview_url' => $preview_url,
-                            'download_url' => $proxy_url,
+                            'thumbnail' => $hd_pic,
+                            'preview_url' => $hd_pic,
+                            'download_url' => $hd_pic,
                             'media' => [
                                 [
                                     'type' => 'dp',
                                     'quality' => 'Full HD Profile Picture (1080p)',
                                     'url' => $hd_pic,
-                                    'thumbnail' => $preview_url,
-                                    'preview_url' => $preview_url,
-                                    'proxy_url' => $proxy_url
+                                    'thumbnail' => $hd_pic,
+                                    'preview_url' => $hd_pic,
+                                    'download_url' => $hd_pic
                                 ]
                             ]
                         ];
@@ -1319,24 +1318,23 @@ function fetch_instagram_dp($username) {
     if ($p_res['code'] === 200 && !empty($p_res['body'])) {
         if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $p_res['body'], $m)) {
             $pic = html_entity_decode($m[1]);
-            $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic);
-            $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($pic);
             return [
                 'type' => 'dp',
+                'author' => '@' . $username,
                 'username' => $username,
                 'full_name' => $username,
                 'biography' => 'Instagram Profile • @' . $username,
-                'thumbnail' => $preview_url,
-                'preview_url' => $preview_url,
-                'download_url' => $proxy_url,
+                'thumbnail' => $pic,
+                'preview_url' => $pic,
+                'download_url' => $pic,
                 'media' => [
                     [
                         'type' => 'dp',
                         'quality' => 'HD Profile Picture',
                         'url' => $pic,
-                        'thumbnail' => $preview_url,
-                        'preview_url' => $preview_url,
-                        'proxy_url' => $proxy_url
+                        'thumbnail' => $pic,
+                        'preview_url' => $pic,
+                        'download_url' => $pic
                     ]
                 ]
             ];

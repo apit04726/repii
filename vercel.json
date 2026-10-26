@@ -23,6 +23,10 @@
       "dest": "/sitemap.xml"
     },
     {
+      "src": "/ads.txt",
+      "dest": "/ads.txt"
+    },
+    {
       "src": "/api.php",
       "dest": "/api/api.php"
     },
@@ -45,6 +49,22 @@
     {
       "src": "/download",
       "dest": "/api/download.php"
+    },
+    {
+      "src": "/privacy(\\.php)?",
+      "dest": "/api/privacy.php"
+    },
+    {
+      "src": "/terms(\\.php)?",
+      "dest": "/api/terms.php"
+    },
+    {
+      "src": "/contact(\\.php)?",
+      "dest": "/api/contact.php"
+    },
+    {
+      "src": "/about(\\.php)?",
+      "dest": "/api/about.php"
     },
     {
       "src": "/",
