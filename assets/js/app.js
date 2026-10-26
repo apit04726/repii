@@ -461,8 +461,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const downloadOptions = document.getElementById('downloadOptions');
 
         // Set Header
+        if ((data.type === 'story' || !data.type) && ((lastSearchedUrl && (/instagram\.com\/s\//i.test(lastSearchedUrl) || /stories\/highlights\//i.test(lastSearchedUrl))) || (typeof activeServiceTab !== 'undefined' && activeServiceTab === 'highlights'))) {
+            data.type = 'highlight';
+        }
         typeBadge.textContent = (data.type || 'Media').toUpperCase();
         authorName.textContent = data.author || (data.username ? '@' + data.username : 'Instagram Media');
+        if (authorName.textContent === 'Instagram User' || authorName.textContent === '@instagram_user') {
+            const storyMatch = (lastSearchedUrl || '').match(/instagram\.com\/stories\/(?!highlights\/)([A-Za-z0-9._]+)/i);
+            const directUserMatch = (lastSearchedUrl || '').match(/^@?([A-Za-z0-9._]{1,30})$/);
+            const profileMatch = (lastSearchedUrl || '').match(/instagram\.com\/([A-Za-z0-9._]{1,30})/i);
+            if (storyMatch && storyMatch[1]) {
+                authorName.textContent = '@' + storyMatch[1];
+            } else if (directUserMatch && directUserMatch[1] && !/^(?:https?|reel|p|tv)$/i.test(directUserMatch[1])) {
+                authorName.textContent = '@' + directUserMatch[1];
+            } else if (profileMatch && profileMatch[1] && !/^(?:reel|reels|p|tv|stories|explore)$/i.test(profileMatch[1])) {
+                authorName.textContent = '@' + profileMatch[1];
+            }
+        }
         
         if (data.type === 'dp' && (data.preview_url || data.thumbnail)) {
             authorAvatar.referrerPolicy = 'no-referrer';

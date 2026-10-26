@@ -853,11 +853,21 @@ body {
   gap: 0.65rem;
   font-weight: 700;
   font-size: 0.96rem;
+  min-width: 0;
+  max-width: 65%;
+}
+
+.result-author span#resultAuthorName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .result-author-avatar {
   width: 36px;
   height: 36px;
+  flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
   background: var(--ig-grad);

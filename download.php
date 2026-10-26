@@ -109,7 +109,9 @@ $allowed_domains = [
     'facebook.com',
     'akamaihd.net',
     'threads.net',
-    'unsplash.com'
+    'unsplash.com',
+    'snapcdn.app',
+    'rapidcdn.app'
 ];
 
 $is_allowed = false;
