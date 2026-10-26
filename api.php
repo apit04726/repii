@@ -113,9 +113,40 @@ function set_cached_media($key, $data) {
     }
 }
 
+function secure_media_item_links(&$item, $default_type = 'video', $default_name = '') {
+    if (!is_array($item)) return;
+    $target = $item['url'] ?? $item['download_url'] ?? '';
+    $type = $item['type'] ?? $default_type;
+    $name = $item['name'] ?? $default_name;
+    $thumb = $item['thumbnail'] ?? $item['thumb'] ?? '';
+    
+    if ($target && function_exists('generate_secure_proxy_url')) {
+        $item['proxy_url'] = generate_secure_proxy_url($target, $type, $name, $thumb);
+        if ($type === 'dp' || !empty($item['preview_url'])) {
+            $item['preview_url'] = generate_secure_proxy_url($target, $type, $name, $thumb, true);
+        }
+    }
+}
+
 function json_success($data, $cache_key = null) {
     if ($cache_key) {
         set_cached_media($cache_key, $data);
+    }
+    // Cryptographically sign all download links with HMAC token & expiration
+    if (!empty($data) && is_array($data)) {
+        $main_type = $data['type'] ?? 'video';
+        $main_auth = trim(str_replace('@', '', $data['author'] ?? 'media'));
+        if (!empty($data['media']) && is_array($data['media'])) {
+            foreach ($data['media'] as $idx => &$m) {
+                $name = 'InstaGo_' . $main_auth . '_' . ($idx + 1);
+                secure_media_item_links($m, $main_type, $name);
+            }
+            unset($m);
+        }
+        if (!empty($data['download_url']) && function_exists('generate_secure_proxy_url')) {
+            $thumb = $data['thumbnail'] ?? '';
+            $data['proxy_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb);
+        }
     }
     echo json_encode([
         'status' => 'success',
@@ -1154,78 +1185,75 @@ function fetch_instagram_dp($username) {
     $username = preg_replace('/[^a-zA-Z0-9._]/', '', $username);
     if (empty($username)) return null;
 
-    // Stage 0: Native Anonymous Profile OpenGraph Scraper (100% Free, Ban-Free, Works for Public & Private)
-    $native_dp = fetch_via_native_profile_scraper($username);
-    if ($native_dp && !empty($native_dp['download_url'])) {
-        return $native_dp;
+    // Stage 1: Direct Instagram GraphQL / Web Profile Info Endpoint via Session Pool (Highest Resolution HD DP)
+    $sessions = get_instagram_session_pool();
+    if (!empty($sessions)) {
+        foreach ($sessions as $sess) {
+            $cookies = get_session_cookies($sess);
+            $sticky_proxy = get_session_sticky_proxy($sess);
+
+            $api_url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
+            $headers = [
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'X-IG-App-ID: 936619743392459',
+                'X-Requested-With: XMLHttpRequest',
+                'Referer: https://www.instagram.com/' . urlencode($username) . '/'
+            ];
+            
+            $res = make_curl_request($api_url, $headers, null, $cookies, $sticky_proxy);
+            if ($res['code'] === 200 && !empty($res['body'])) {
+                $json = json_decode($res['body'], true);
+                $user = $json['data']['user'] ?? null;
+                if ($user) {
+                    $hd_pic = $user['profile_pic_url_hd'] ?? $user['profile_pic_url'] ?? '';
+                    if (!empty($hd_pic)) {
+                        $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
+                        $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
+                        $dp_author = '@' . ltrim($user['username'] ?? $username, '@');
+                        return [
+                            'type' => 'dp',
+                            'author' => $dp_author,
+                            'username' => $user['username'] ?? $username,
+                            'full_name' => $user['full_name'] ?? '',
+                            'biography' => $user['biography'] ?? '',
+                            'followers' => $user['edge_followed_by']['count'] ?? 0,
+                            'following' => $user['edge_follow']['count'] ?? 0,
+                            'posts_count' => $user['edge_owner_to_timeline_media']['count'] ?? 0,
+                            'is_verified' => $user['is_verified'] ?? false,
+                            'is_private' => $user['is_private'] ?? false,
+                            'thumbnail' => $preview_url,
+                            'preview_url' => $preview_url,
+                            'download_url' => $proxy_url,
+                            'media' => [
+                                [
+                                    'type' => 'dp',
+                                    'quality' => 'Full HD Profile Picture (1080p)',
+                                    'url' => $hd_pic,
+                                    'thumbnail' => $preview_url,
+                                    'preview_url' => $preview_url,
+                                    'proxy_url' => $proxy_url
+                                ]
+                            ]
+                        ];
+                    }
+                }
+            } elseif ($res['code'] === 302 || $res['code'] === 401 || $res['code'] === 429 || $res['code'] === 407 || strpos($res['body'] ?? '', 'checkpoint_required') !== false || strpos($res['body'] ?? '', 'require_login') !== false) {
+                mark_session_cooldown($sess);
+            }
+        }
     }
 
-    // Stage 1: Reference Site Bridge Fallback
+    // Stage 2: Reference Site Bridge Fallback (InDown Engine)
     $profile_url = "https://www.instagram.com/{$username}/";
     $bridge_dp = fetch_via_reference_bridge($profile_url, $username, 'profile');
     if ($bridge_dp && !empty($bridge_dp['download_url'])) {
         return $bridge_dp;
     }
 
-
-    $sessions = get_instagram_session_pool();
-    if (empty($sessions)) {
-        $sessions = [['session_id' => '', 'csrf_token' => '', 'ds_user_id' => '']];
-    }
-
-    foreach ($sessions as $sess) {
-        $cookies = get_session_cookies($sess);
-        $sticky_proxy = get_session_sticky_proxy($sess);
-
-        // 1. Try web profile info endpoint
-        $api_url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
-        $headers = [
-            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'X-IG-App-ID: 936619743392459',
-            'X-Requested-With: XMLHttpRequest',
-            'Referer: https://www.instagram.com/' . urlencode($username) . '/'
-        ];
-        
-        $res = make_curl_request($api_url, $headers, null, $cookies, $sticky_proxy);
-        if ($res['code'] === 200 && !empty($res['body'])) {
-            $json = json_decode($res['body'], true);
-            $user = $json['data']['user'] ?? null;
-            if ($user) {
-                $hd_pic = $user['profile_pic_url_hd'] ?? $user['profile_pic_url'] ?? '';
-                if (!empty($hd_pic)) {
-                    $proxy_url = 'download.php?type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
-                    $preview_url = 'download.php?preview=1&type=dp&name=' . urlencode($username . '_dp') . '&url=' . base64_encode($hd_pic);
-                    $dp_author = '@' . ltrim($user['username'] ?? $username, '@');
-                    return [
-                        'type' => 'dp',
-                        'author' => $dp_author,
-                        'username' => $user['username'] ?? $username,
-                        'full_name' => $user['full_name'] ?? '',
-                        'biography' => $user['biography'] ?? '',
-                        'followers' => $user['edge_followed_by']['count'] ?? 0,
-                        'following' => $user['edge_follow']['count'] ?? 0,
-                        'posts_count' => $user['edge_owner_to_timeline_media']['count'] ?? 0,
-                        'is_verified' => $user['is_verified'] ?? false,
-                        'is_private' => $user['is_private'] ?? false,
-                        'thumbnail' => $preview_url,
-                        'preview_url' => $preview_url,
-                        'download_url' => $proxy_url,
-                        'media' => [
-                            [
-                                'type' => 'image',
-                                'quality' => 'Full HD Profile Picture (1080p)',
-                                'url' => $hd_pic,
-                                'thumbnail' => $preview_url,
-                                'preview_url' => $preview_url,
-                                'proxy_url' => $proxy_url
-                            ]
-                        ]
-                    ];
-                }
-            }
-        } elseif ($res['code'] === 302 || $res['code'] === 401 || $res['code'] === 429 || $res['code'] === 407 || strpos($res['body'] ?? '', 'checkpoint_required') !== false || strpos($res['body'] ?? '', 'require_login') !== false) {
-            mark_session_cooldown($sess);
-        }
+    if (!empty($sessions)) {
+        foreach ($sessions as $sess) {
+            $cookies = get_session_cookies($sess);
+            $sticky_proxy = get_session_sticky_proxy($sess);
 
         // 2. Try web search API (highly reliable, returns DP even when web profile info is rate-limited)
         $search_url = "https://www.instagram.com/api/v1/web/search/topsearch/?query=" . urlencode($username);
@@ -1277,8 +1305,15 @@ function fetch_instagram_dp($username) {
             }
         }
     }
+}
 
-    // 3. Fallback: scrape profile page
+    // 3. Fallback: Native Anonymous Profile OpenGraph Scraper
+    $native_dp = fetch_via_native_profile_scraper($username);
+    if ($native_dp && !empty($native_dp['download_url'])) {
+        return $native_dp;
+    }
+
+    // 4. Fallback: scrape direct profile page
     $profile_url = "https://www.instagram.com/{$username}/";
     $p_res = make_curl_request($profile_url, [], null, $cookies ?? '');
     if ($p_res['code'] === 200 && !empty($p_res['body'])) {
@@ -1296,7 +1331,7 @@ function fetch_instagram_dp($username) {
                 'download_url' => $proxy_url,
                 'media' => [
                     [
-                        'type' => 'image',
+                        'type' => 'dp',
                         'quality' => 'HD Profile Picture',
                         'url' => $pic,
                         'thumbnail' => $preview_url,
@@ -2043,6 +2078,12 @@ if (empty($input_url)) {
     json_fail('Please provide a valid Instagram URL or Username.');
 }
 
+// Strict Input Link Sanitization & Anti-SSRF Guard
+if (preg_match('/^(?:file|phar|php|gopher|dict|data|javascript|vbscript):/i', $input_url) ||
+    preg_match('/\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0|169\.254\.|192\.168\.|10\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.)\b/i', $input_url)) {
+    json_fail('Security Violation: Disallowed network address or protocol scheme.', 403);
+}
+
 // 0. Clean input url (strip leading type prefixes like "Dp https://...", "reel https://...", "story https://...")
 $input_url = preg_replace('/^(?:dp|reel|reels|story|stories|post|photo|photos|highlight|highlights)\s*[:=\-]?\s*/i', '', $input_url);
 
@@ -2170,7 +2211,7 @@ if (preg_match('/instagram\.com\/(?:p|tv)\/([A-Za-z0-9_-]+)/i', $clean_input_for
 
 // 4. DP / Profile: @username or instagram.com/username
 if (preg_match('/^@?([A-Za-z0-9._]{2,30})$/', $clean_input_for_matching, $m) || 
-    preg_match('/instagram\.com\/([A-Za-z0-9._]{2,30})$/i', $clean_input_for_matching, $m)) {
+    preg_match('/instagram\.com\/([A-Za-z0-9._]{2,30})\/?(?:[?#]|$)/i', $clean_input_for_matching, $m)) {
     $username = $m[1];
     // Ignore reserved paths
     $reserved_dp = ['s', 'share', 'reel', 'reels', 'p', 'tv', 'stories', 'story', 'highlight', 'highlights', 'explore', 'direct', 'accounts', 'developer', 'about', 'legal', 'api', 'graphql', 'ajax', 'media', 'tags', 'download'];

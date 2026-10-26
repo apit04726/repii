@@ -4,6 +4,80 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ============================================================
+    // Smart Code & UI Protection: Active Strictly on Live Production
+    // (Localhost / Development environment retains full Right-Click & DevTools for design inspection)
+    // ============================================================
+    const isLocalhost = Boolean(
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname === '[::1]' ||
+        window.location.hostname.endsWith('.local') ||
+        window.location.protocol === 'file:'
+    );
+
+    if (!isLocalhost) {
+        document.body.classList.add('live-protected');
+
+        document.addEventListener('contextmenu', (e) => {
+            const tag = (e.target && e.target.tagName ? e.target.tagName : '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) {
+                return true;
+            }
+            e.preventDefault();
+            return false;
+        }, false);
+
+        document.addEventListener('keydown', (e) => {
+            const key = e.key ? e.key.toUpperCase() : '';
+            const code = e.keyCode || 0;
+
+            // Block F12 (DevTools)
+            if (key === 'F12' || code === 123) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+
+            // Block Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C (Inspect/Console/Element)
+            if (e.ctrlKey && e.shiftKey && (key === 'I' || key === 'J' || key === 'C' || code === 73 || code === 74 || code === 67)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+
+            // Block Ctrl+U (View Page Source)
+            if (e.ctrlKey && (key === 'U' || code === 85)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+
+            // Block Ctrl+S (Save Webpage)
+            if (e.ctrlKey && (key === 'S' || code === 83)) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+        }, false);
+
+        document.addEventListener('dragstart', (e) => {
+            const tag = (e.target && e.target.tagName ? e.target.tagName : '').toLowerCase();
+            if (tag === 'img' || tag === 'a' || tag === 'video') {
+                e.preventDefault();
+                return false;
+            }
+        }, false);
+
+        // Prevent Mobile Long-Press / Callout Menu on Links & Buttons
+        document.addEventListener('touchstart', (e) => {
+            const el = e.target ? e.target.closest('a, img, button, video') : null;
+            if (el) {
+                el.style.webkitTouchCallout = 'none';
+            }
+        }, { passive: true });
+    }
+
     // DOM Elements
     const searchForm = document.getElementById('searchForm');
     const urlInput = document.getElementById('urlInput');
@@ -100,9 +174,11 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.toggle('active', btn.getAttribute('data-type') === type);
         });
 
-        updatePlaceholder(type);
+        if (urlInput) {
+            updatePlaceholder(type);
+        }
 
-        if (shouldScroll) {
+        if (shouldScroll && searchForm) {
             const isResultShowing = resultCard && resultCard.style.display === 'block';
             if (!isResultShowing) {
                 if (navigator.vibrate) {
@@ -110,12 +186,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 searchForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
-                if (!isMobileOrTablet) {
+                if (!isMobileOrTablet && urlInput) {
                     setTimeout(() => urlInput.focus(), 300);
                 }
             }
         }
     }
+
+    // Auto-activate tab from query param if arriving from a subpage
+    try {
+        const initialType = new URLSearchParams(window.location.search).get('type');
+        if (initialType && ['all', 'reels', 'dp', 'stories', 'highlights', 'photos'].includes(initialType)) {
+            switchActiveTab(initialType, false);
+        }
+    } catch(e) {}
 
     function bindTabActivation(elements, isDock = false) {
         elements.forEach(btn => {
@@ -146,6 +230,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const now = Date.now();
                     lastTabSwitchTime = now;
                     const type = btn.getAttribute('data-type') || 'all';
+                    if (!searchForm) {
+                        window.location.href = './?type=' + encodeURIComponent(type);
+                        return;
+                    }
                     switchActiveTab(type, isDock);
                 }
             });
@@ -155,6 +243,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (now - lastTabSwitchTime < 350) return; // Prevent double trigger on touch devices
                 lastTabSwitchTime = now;
                 const type = btn.getAttribute('data-type') || 'all';
+                if (!searchForm) {
+                    window.location.href = './?type=' + encodeURIComponent(type);
+                    return;
+                }
                 switchActiveTab(type, isDock);
             });
         });
@@ -164,6 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindTabActivation(dockBtns, false);
 
     function updatePlaceholder(type) {
+        if (!urlInput) return;
         const langObj = (typeof i18n !== 'undefined' && i18n[currentAppLang]) ? i18n[currentAppLang] : null;
         if (langObj && langObj.placeholders) {
             urlInput.placeholder = langObj.placeholders[type] || langObj.placeholders.all;
@@ -276,49 +369,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 3. Input Auto-Detection, Debounced Auto-Search & Clear Button
-    urlInput.addEventListener('input', () => {
-        const val = urlInput.value.trim();
-        clearBtn.style.display = val ? 'flex' : 'none';
-
-        if (!val) {
-            clearResultsAndErrors();
-            return;
-        }
-
-        detectUrlType(val);
-
-        // Auto-search if a full link is entered
-        if (autoSearchTimer) clearTimeout(autoSearchTimer);
-        if (isValidInstagramTarget(val) && val !== lastSearchedUrl) {
-            autoSearchTimer = setTimeout(() => {
-                triggerAutoSearch();
-            }, 600);
-        }
-    });
-
-    clearBtn.addEventListener('click', () => {
-        urlInput.value = '';
-        clearBtn.style.display = 'none';
-        clearResultsAndErrors();
-        const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
-        if (!isMobileOrTablet) {
-            urlInput.focus();
-        }
-    });
-
-    // Auto-search on paste (Ctrl+V, mobile long press, clipboard suggestion)
-    urlInput.addEventListener('paste', () => {
-        setTimeout(() => {
+    if (urlInput && searchForm) {
+        urlInput.addEventListener('input', () => {
             const val = urlInput.value.trim();
-            if (val && isValidInstagramTarget(val)) {
-                triggerAutoSearch();
+            if (clearBtn) clearBtn.style.display = val ? 'flex' : 'none';
+
+            if (!val) {
+                clearResultsAndErrors();
+                return;
             }
-        }, 50);
-    });
+
+            detectUrlType(val);
+
+            // Auto-search if a full link is entered
+            if (autoSearchTimer) clearTimeout(autoSearchTimer);
+            if (isValidInstagramTarget(val) && val !== lastSearchedUrl) {
+                autoSearchTimer = setTimeout(() => {
+                    triggerAutoSearch();
+                }, 600);
+            }
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                urlInput.value = '';
+                clearBtn.style.display = 'none';
+                clearResultsAndErrors();
+                const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+                if (!isMobileOrTablet) {
+                    urlInput.focus();
+                }
+            });
+        }
+
+        // Auto-search on paste (Ctrl+V, mobile long press, clipboard suggestion)
+        urlInput.addEventListener('paste', () => {
+            setTimeout(() => {
+                const val = urlInput.value.trim();
+                if (val && isValidInstagramTarget(val)) {
+                    triggerAutoSearch();
+                }
+            }, 50);
+        });
+    }
 
     function detectUrlType(val) {
         if (!val) {
-            detectionIndicator.classList.remove('active');
+            if (detectionIndicator) detectionIndicator.classList.remove('active');
             return;
         }
 
@@ -344,63 +441,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (detected) {
-            detectedTypeSpan.textContent = detected;
-            detectionIndicator.classList.add('active');
+            if (detectedTypeSpan) detectedTypeSpan.textContent = detected;
+            if (detectionIndicator) detectionIndicator.classList.add('active');
             // Sync active tab in both desktop bar and mobile dock with auto-scroll
             switchActiveTab(tabKey, false);
         } else {
-            detectionIndicator.classList.remove('active');
+            if (detectionIndicator) detectionIndicator.classList.remove('active');
         }
     }
 
     // 4. Clipboard Paste Button (Auto triggers search)
-    pasteBtn.addEventListener('click', async () => {
-        try {
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                const text = await navigator.clipboard.readText();
-                if (text) {
-                    urlInput.value = text.trim();
-                    clearBtn.style.display = 'flex';
-                    detectUrlType(text.trim());
-                    triggerAutoSearch();
+    if (pasteBtn && urlInput && searchForm) {
+        pasteBtn.addEventListener('click', async () => {
+            try {
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        urlInput.value = text.trim();
+                        if (clearBtn) clearBtn.style.display = 'flex';
+                        detectUrlType(text.trim());
+                        triggerAutoSearch();
+                    }
+                } else {
+                    urlInput.focus();
+                    document.execCommand('paste');
+                    setTimeout(() => triggerAutoSearch(), 60);
                 }
-            } else {
+            } catch (err) {
                 urlInput.focus();
-                document.execCommand('paste');
-                setTimeout(() => triggerAutoSearch(), 60);
+                showToast('Press Ctrl+V to paste the link', 'info');
             }
-        } catch (err) {
-            urlInput.focus();
-            showToast('Press Ctrl+V to paste the link', 'info');
-        }
-    });
+        });
+    }
 
     // 5. Form Submission & AJAX
-    searchForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const url = urlInput.value.trim();
-        lastSearchedUrl = url;
+    if (searchForm && urlInput) {
+        searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = urlInput.value.trim();
+            lastSearchedUrl = url;
 
-        if (urlInput) urlInput.blur();
-        if (document.activeElement && typeof document.activeElement.blur === 'function') {
-            document.activeElement.blur();
-        }
-
-        if (!url) {
-            showError('Please paste a valid Instagram link.');
-            const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
-            if (!isMobileOrTablet) {
-                urlInput.focus();
+            if (urlInput) urlInput.blur();
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                document.activeElement.blur();
             }
-            return;
-        }
 
-        // Reset UI States
-        hideError();
-        resultCard.style.display = 'none';
-        loaderCard.style.display = 'flex';
-        submitBtn.disabled = true;
-        submitBtnText.textContent = 'Fetching...';
+            if (!url) {
+                showError('Please paste a valid Instagram link.');
+                const isMobileOrTablet = window.innerWidth <= 1024 || ('ontouchstart' in window);
+                if (!isMobileOrTablet) {
+                    urlInput.focus();
+                }
+                return;
+            }
+
+            // Reset UI States
+            hideError();
+            if (resultCard) resultCard.style.display = 'none';
+            if (loaderCard) loaderCard.style.display = 'flex';
+            if (submitBtn) submitBtn.disabled = true;
+            if (submitBtnText) submitBtnText.textContent = 'Fetching...';
 
         // Animated loader status messages
         const statuses = [
@@ -445,6 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showError('Unable to connect to server. Please try again in a moment.');
         }
     });
+    }
 
     // 6. Render Result Card
     function renderResult(data) {
@@ -590,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                                 <span class="loop-text">Loop: Off</span>
                             </button>
-                            <a href="${dlUrl}" target="_blank" rel="opener" class="video-action-btn download-action-btn">
+                            <a href="${dlUrl}" target="_blank" rel="noopener noreferrer" class="video-action-btn download-action-btn">
                                 <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                 <span>Download MP4</span>
                             </a>
@@ -1671,6 +1772,590 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const subpagesI18n = {
+        en: {
+            contact: {
+                breadHome: 'Home',
+                breadCurrent: 'Contact & DMCA',
+                badgeText: 'Support & Copyright Desk',
+                titleText: 'Contact Us & DMCA Takedown Notice',
+                subtitleText: 'We are here to assist with technical feedback, partner inquiries, and DMCA copyright compliance.',
+                ch1TitleText: 'Technical Support & Feedback',
+                ch1BadgeText: '24/7 Desk',
+                ch1DescText: 'For issues with video downloading, browser compatibility, or suggestions:',
+                ch2TitleText: 'DMCA & Copyright Compliance',
+                ch2BadgeText: 'Safe Harbor',
+                ch2DescText: 'For verified copyright holders, intellectual property, and link removal inquiries:',
+                ch3TitleText: 'Business & Partnerships',
+                ch3BadgeText: 'Enterprise',
+                ch3DescText: 'For press, advertising inquiries, and technical infrastructure collaborations:',
+                dmcaReqText: '<strong>DMCA Notice Requirements (17 U.S.C. § 512):</strong> When submitting a takedown notice, please provide: (1) Description of copyrighted work, (2) The exact Instagram URL to block, (3) Proof of copyright ownership, and (4) Your full contact credentials.',
+                formTitleText: 'Send Us a Direct Message',
+                formDescText: 'Fill out the form below and our dedicated support team will reply within 24 to 48 business hours.',
+                labelNameText: 'Your Name *',
+                labelEmailText: 'Email Address *',
+                labelCategoryText: 'Inquiry Type',
+                optGeneralText: 'General Support & Technical Feedback',
+                optDmcaText: 'DMCA Copyright Takedown Notice',
+                optBugText: 'Bug Report / Video Fetching Issue',
+                optPartnerText: 'Business Partnership & Press',
+                labelSubjectText: 'Subject',
+                labelMessageText: 'Message *',
+                btnSendMsgText: 'Send Message',
+                trustLine: '🔒 We protect your data under our <a href="privacy.php" style="color:var(--accent-blue);">Privacy Policy</a>',
+                respTime: 'Response: &le; 24h',
+                btnHomeText: 'Back to Downloader',
+                footerTermsLine: 'Read our <a href="terms.php" style="color:var(--accent-blue);">Terms of Service</a> &amp; <a href="privacy.php" style="color:var(--accent-blue);">Privacy Policy</a>'
+            },
+            about: {
+                breadHome: 'Home',
+                breadCurrent: 'About Us',
+                badgeText: 'Mission & Engineering',
+                titleText: 'About InstaGo',
+                subtitleText: "Building the world's cleanest, fastest, and most privacy-focused Instagram media downloader.",
+                btnHomeText: 'Start Downloading Media',
+                assistText: 'Need assistance? <a href="contact.php" style="color:var(--accent-blue);">Contact Support</a>',
+                articleBody: `<h2>Our Mission</h2>
+<p><strong>InstaGo</strong> was founded with a straightforward goal: to provide an intuitive, high-speed, and secure web platform that empowers creators, educators, and social media enthusiasts to save publicly accessible Instagram media without intrusive advertisements, confusing redirects, or privacy compromises.</p>
+<div class="legal-box-highlight success">
+    <p><strong>Our Philosophy:</strong> Clean design, zero login hurdles, zero watermarks, and maximum native video fidelity (1080p Full HD MP4).</p>
+</div>
+<h2>What Makes InstaGo Unique?</h2>
+<div class="legal-contact-grid">
+    <div class="legal-contact-card">
+        <h4>🎬 1080p Pure Fidelity</h4>
+        <p>We never compress, resize, or alter original Instagram video bitrate or audio fidelity. Videos are delivered exactly as uploaded by original creators.</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>🔒 Privacy by Design</h4>
+        <p>No account required, no passwords stored, and zero tracking cookies. Your searches are processed entirely on-the-fly and never recorded.</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>⚡ High-Speed CDN Proxy</h4>
+        <p>Our distributed chunked proxy streams files with native download headers, preventing download timeouts and ensuring maximum download speed.</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>📱 All Devices Supported</h4>
+        <p>Engineered with a native app-like experience across iOS Safari (iPhone &amp; iPad), Android Chrome, Windows PC, Mac, and Linux.</p>
+    </div>
+</div>
+<h2>Fair &amp; Ethical Service</h2>
+<p>We believe in supporting content creators and respecting intellectual property. InstaGo operates strictly within fair-use boundaries by encouraging users to credit original creators when using media for educational or commentary purposes, and we offer responsive DMCA copyright removal channels for copyright holders.</p>
+<h2>Technical Reliability &amp; Uptime</h2>
+<p>We actively maintain multi-node failover parsing pipelines to guarantee 99.9% uptime, even when third-party social protocols update their delivery endpoints.</p>`
+            },
+            privacy: {
+                breadHome: 'Home',
+                breadCurrent: 'Privacy Policy',
+                badgeText: 'Compliance & Transparency',
+                titleText: 'Privacy Policy & Cookie Disclosure',
+                subtitleText: `Last Updated: ${new Date().toLocaleDateString('en-US', {month: 'long', year: 'numeric'})} | Strict Compliance with Google AdSense, GDPR & CCPA`,
+                tocTitle: 'On This Page',
+                tocOverview: 'Overview & Scope',
+                tocAdsense: '1. Google AdSense & Cookies',
+                tocZeroLog: '2. Zero-Log Architecture',
+                tocLogFiles: '3. Server Logs & CDN',
+                tocThirdParty: '4. Third-Party Partners',
+                tocCcpa: '5. CCPA Rights (California)',
+                tocGdpr: '6. GDPR Compliance (EU)',
+                tocChildren: "7. Children's Information",
+                tocConsent: '8. Consent & Contact',
+                btnHomeText: 'Back to Downloader',
+                contactSupportText: 'Have inquiries? <a href="contact.php" style="color:var(--accent-blue);">Contact Support</a>',
+                articleBody: `<div id="overview">
+    <p>At <strong>InstaGo</strong>, the privacy of our visitors is of paramount importance to us. This Privacy Policy document details the types of information that is collected and recorded by InstaGo and how we safeguard and process it.</p>
+    <div class="legal-box-highlight success">
+        <p><strong>Zero-Credential Guarantee:</strong> We do NOT require user accounts, passwords, Instagram session credentials, or phone numbers. We do NOT store personal browsing history or media archives on our servers.</p>
+    </div>
+</div>
+<h2 id="adsense">1. Google AdSense &amp; DoubleClick DART Cookies</h2>
+<p>Google is a third-party vendor on our website. It utilizes cookies, specifically known as <strong>DART cookies</strong>, to serve personalized and non-personalized advertisements to our visitors based upon their visit to our site and other websites across the Internet.</p>
+<p>Visitors may choose to opt out of the use of DART cookies by visiting the Google Ad and Content Network Privacy Policy at: <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">https://policies.google.com/technologies/ads</a>.</p>
+<p>For more detailed information regarding Google advertising practices and how Google handles user data when you visit partner sites, please review: <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">Google Privacy &amp; Terms for Partner Sites</a>.</p>
+<h2 id="zero-log">2. Information We Do NOT Collect (Zero-Log Guarantee)</h2>
+<p>Unlike other platforms, InstaGo is engineered strictly as an on-the-fly gateway:</p>
+<ul>
+    <li><strong>No User Registration:</strong> You are never asked for your email, full name, address, or credit card details.</li>
+    <li><strong>No Instagram Credentials:</strong> We never request or store your Instagram login username, password, two-factor authentication codes, or session tokens.</li>
+    <li><strong>No Download History:</strong> Search queries and media requests are processed transiently in server memory and discarded immediately upon delivery.</li>
+</ul>
+<h2 id="log-files">3. Log Files &amp; CDN Infrastructure</h2>
+<p>InstaGo follows a standard procedure of utilizing server log files. These files log visitors when they access websites. The information collected by log files includes internet protocol (IP) addresses, browser type, Internet Service Provider (ISP), date and time stamp, referring/exit pages, and possibly the number of clicks. These are not linked to any information that is personally identifiable. The purpose of this information is for analyzing trends, administering the site, tracking users' movement around the website, and gathering broad demographic information to optimize delivery speed.</p>
+<h2 id="third-party">4. Third-Party Advertising Partners</h2>
+<p>Our advertising partners may utilize cookies, JavaScript, or Web Beacons in their respective advertisements and links that appear on InstaGo. These technologies measure the effectiveness of advertising campaigns and personalize the advertising content that you see.</p>
+<p>Note that InstaGo has no access to or control over these cookies that are used by third-party advertisers.</p>
+<h2 id="ccpa">5. CCPA Privacy Rights (Do Not Sell My Personal Information)</h2>
+<p>Under the California Consumer Privacy Act (CCPA), California consumers have the right to request that a business that collects a consumer's personal data disclose the categories and specific pieces of personal data that a business has collected about consumers, or request deletion of any consumer data collected. Because InstaGo does not sell, trade, or retain personal data, we already exceed all CCPA compliance guidelines.</p>
+<h2 id="gdpr">6. GDPR Data Protection Rights</h2>
+<p>We want to make sure you are fully aware of all of your data protection rights under the General Data Protection Regulation (GDPR). Every user is entitled to the right to access, rectification, erasure, and restriction of processing under applicable statutory provisions.</p>
+<h2 id="children">7. Children's Information &amp; COPPA</h2>
+<p>Another part of our priority is adding protection for children while using the internet. We encourage parents and guardians to observe, participate in, and/or monitor and guide their online activity. InstaGo does not knowingly collect any Personal Identifiable Information from children under the age of 13.</p>
+<h2 id="consent">8. Consent &amp; Contacting Our DPO</h2>
+<p>By using our website, you hereby consent to our Privacy Policy and agree to its Terms and Conditions. If you have any additional questions or require more information, please reach out via our dedicated contact page.</p>`
+            },
+            terms: {
+                breadHome: 'Home',
+                breadCurrent: 'Terms of Service',
+                badgeText: 'Usage Guidelines',
+                titleText: 'Terms of Service & Fair Use',
+                subtitleText: `Effective Date: ${new Date().toLocaleDateString('en-US', {month: 'long', year: 'numeric'})} | Please read these conditions carefully before using our platform.`,
+                tocTitle: 'On This Page',
+                tocIntro: 'Agreement to Terms',
+                tocFairUse: '1. Fair Use & Purpose',
+                tocIp: '2. IP & Hosting Disclaimer',
+                tocConduct: '3. User Conduct',
+                tocWarranties: '4. Disclaimer of Warranties',
+                tocLiability: '5. Limitation of Liability',
+                tocModifications: '6. Modifications',
+                tocLaw: '7. Governing Law',
+                btnHomeText: 'Back to Downloader',
+                reviewPrivacyText: 'Review our <a href="privacy.php" style="color:var(--accent-blue);">Privacy Policy</a>',
+                articleBody: `<div id="intro">
+    <p>Welcome to <strong>InstaGo</strong>. By accessing or using our website, you agree that you have read, understood, and accept to be bound by these Terms of Service. If you do not agree with these terms, you must discontinue using our services immediately.</p>
+</div>
+<h2 id="fair-use">1. Fair Use &amp; Educational Purpose</h2>
+<p>InstaGo is designed as an educational web utility to assist users in downloading and creating backup copies of publicly available Instagram content (such as Reels, Stories, Highlights, and Profile Pictures) for personal, non-commercial, offline viewing purposes.</p>
+<div class="legal-box-highlight warning">
+    <p><strong>Notice:</strong> InstaGo is strictly independent and is NOT affiliated, authorized, endorsed, sponsored, or certified in any manner by Instagram, Meta Platforms, Inc., or any of their subsidiaries.</p>
+</div>
+<h2 id="ip-disclaimer">2. Intellectual Property Rights &amp; Hosting Disclaimer</h2>
+<p><strong>InstaGo does not host, store, archive, or replicate any copyrighted audio, video, or image media on its servers.</strong></p>
+<p>All multimedia streams processed by this service are retrieved on-demand and delivered directly from public Content Delivery Network (CDN) servers operated by Instagram. All copyrights, trademarks, service marks, and trade names remain the exclusive property of their respective creators and copyright owners.</p>
+<h2 id="user-conduct">3. User Responsibilities &amp; Prohibited Conduct</h2>
+<p>As a condition of your use of InstaGo, you agree that you will not utilize downloaded materials for unauthorized public broadcast, commercial sale, resale, or distribution without explicit written consent from the copyright holder, nor attempt to disrupt or flood service infrastructure.</p>
+<h2 id="warranties">4. Disclaimer of Warranties</h2>
+<p>The service is provided on an "AS IS" and "AS AVAILABLE" basis without warranties of any kind, whether express, statutory, or implied.</p>
+<h2 id="liability">5. Limitation of Liability</h2>
+<p>To the maximum extent permitted by applicable law, in no event shall InstaGo, its developers, or affiliates be liable for any direct, indirect, incidental, or consequential damages arising from your access to or inability to use this web utility.</p>
+<h2 id="modifications">6. Modifications to Terms</h2>
+<p>We reserve the right to revise, modify, or replace these Terms of Service at any time without prior notice. Any modifications become effective immediately upon being posted on this page.</p>
+<h2 id="governing-law">7. Governing Law &amp; Severability</h2>
+<p>These Terms shall be interpreted and governed in accordance with international digital copyright practices and statutory safe harbor conventions.</p>`
+            }
+        },
+        gu: {
+            contact: {
+                breadHome: 'હોમ',
+                breadCurrent: 'સંપર્ક અને DMCA',
+                badgeText: 'સપોર્ટ અને કોપીરાઇટ ડેસ્ક',
+                titleText: 'અમારો સંપર્ક કરો અને DMCA નોટિસ',
+                subtitleText: 'ટેકનિકલ ફીડબેક, બિઝનેસ પૂછપરછ અને DMCA કોપીરાઇટ મદદ માટે અમે અહીં હાજર છીએ.',
+                ch1TitleText: 'ટેકનિકલ સપોર્ટ અને ફીડબેક',
+                ch1BadgeText: '૨૪/૭ ડેસ્ક',
+                ch1DescText: 'વિડીયો ડાઉનલોડિંગ, બ્રાઉઝર સમસ્યા અથવા સૂચનો માટે સંપર્ક કરો:',
+                ch2TitleText: 'DMCA અને કોપીરાઇટ અનુપાલન',
+                ch2BadgeText: 'સુરક્ષિત હાર્બર',
+                ch2DescText: 'વેરિફાઇડ કોપીરાઇટ ધારકો, બૌદ્ધિક સંપદા અને લિંક દૂર કરવાની વિનંતીઓ માટે:',
+                ch3TitleText: 'બિઝનેસ અને ભાગીદારી',
+                ch3BadgeText: 'એન્ટરપ્રાઇઝ',
+                ch3DescText: 'પ્રેસ, જાહેરાત પૂછપરછ અને ટેકનિકલ ઇન્ફ્રાસ્ટ્રક્ચર સહયોગ માટે:',
+                dmcaReqText: '<strong>DMCA નોટિસ જરૂરિયાતો (17 U.S.C. § 512):</strong> વિનંતી મોકલતી વખતે કૃપા કરીને આપો: (૧) કોપીરાઇટ સામગ્રીની વિગત, (૨) બ્લોક કરવા માટેની ચોક્કસ ઇન્સ્ટાગ્રામ URL, (૩) માલિકીનો પુરાવો અને (૪) તમારી સંપર્ક વિગતો.',
+                formTitleText: 'અમને ડાયરેક્ટ મેસેજ મોકલો',
+                formDescText: 'નીચેનું ફોર્મ ભરો અને અમારી સપોર્ટ ટીમ ૨૪ થી ૪૮ કામકાજના કલાકોમાં જવાબ આપશે.',
+                labelNameText: 'તમારું નામ *',
+                labelEmailText: 'ઇમેઇલ એડ્રેસ *',
+                labelCategoryText: 'પૂછપરછનો પ્રકાર',
+                optGeneralText: 'સામાન્ય સપોર્ટ અને ટેકનિકલ ફીડબેક',
+                optDmcaText: 'DMCA કોપીરાઇટ ટેકડાઉન નોટિસ',
+                optBugText: 'બગ રિપોર્ટ / વિડીયો ફેચિંગ સમસ્યા',
+                optPartnerText: 'બિઝનેસ પાર્ટનરશિપ અને પ્રેસ',
+                labelSubjectText: 'વિષય (Subject)',
+                labelMessageText: 'તમારો સંદેશ *',
+                btnSendMsgText: 'મેસેજ મોકલો',
+                trustLine: '🔒 તમારો ડેટા અમારી <a href="privacy.php" style="color:var(--accent-blue);">પ્રાઇવેસી પોલિસી</a> હેઠળ સુરક્ષિત છે',
+                respTime: 'જવાબ: &le; ૨૪ કલાક',
+                btnHomeText: 'ડાઉનલોડર પર પાછા જાઓ',
+                footerTermsLine: 'અમારી <a href="terms.php" style="color:var(--accent-blue);">સેવાની શરતો</a> અને <a href="privacy.php" style="color:var(--accent-blue);">પ્રાઇવેસી પોલિસી</a> વાંચો'
+            },
+            about: {
+                breadHome: 'હોમ',
+                breadCurrent: 'અમારા વિશે',
+                badgeText: 'મિશન અને એન્જિનિયરિંગ',
+                titleText: 'InstaGo વિશે',
+                subtitleText: 'વિશ્વનું સૌથી સ્વચ્છ, સૌથી ઝડપી અને સંપૂર્ણ ગુપ્ત ઇન્સ્ટાગ્રામ મીડિયા ડાઉનલોડર.',
+                btnHomeText: 'મીડિયા ડાઉનલોડ કરવાનું શરૂ કરો',
+                assistText: 'કોઈ મદદ જોઈએ છે? <a href="contact.php" style="color:var(--accent-blue);">સપોર્ટ ટીમનો સંપર્ક કરો</a>',
+                articleBody: `<h2>અમારું મિશન</h2>
+<p><strong>InstaGo</strong> ની સ્થાપના એક સ્પષ્ટ લક્ષ્ય સાથે કરવામાં આવી હતી: ક્રિએટર્સ, શિક્ષકો અને સોશિયલ મીડિયા ઉત્સાહીઓને કોઈપણ હેરાન કરતી પોપઅપ જાહેરાતો, અસ્પષ્ટ રીડાયરેક્ટ્સ અથવા પ્રાઇવેસી જોખમ વિના પબ્લિક ઇન્સ્ટાગ્રામ મીડિયા સેવ કરવા માટે ઝડપી, સલામત અને સરળ પ્લેટફોર્મ પૂરું પાડવું.</p>
+<div class="legal-box-highlight success">
+    <p><strong>અમારી ફિલસૂફી:</strong> સ્વચ્છ ડિઝાઇન, કોઈ લોગિન ઝંઝટ નહીં, ઝીરો વોટરમાર્ક અને ૧૦૦% ઓરિજિનલ વિડીયો ક્વોલિટી (1080p Full HD MP4).</p>
+</div>
+<h2>શા માટે InstaGo અનન્ય છે?</h2>
+<div class="legal-contact-grid">
+    <div class="legal-contact-card">
+        <h4>🎬 1080p શુદ્ધ ક્વોલિટી</h4>
+        <p>અમે ક્યારેય વિડિયો ક્વોલિટી કે ઓડિયો બિટરેટ ઘટાડતા નથી. મૂળ ક્રિએટરે જેવી ક્વોલિટીમાં અપલોડ કર્યું હોય તેવું જ શુદ્ધ વિડીયો મળે છે.</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>🔒 પ્રાઇવેસી બાય ડિઝાઇન</h4>
+        <p>કોઈ એકાઉન્ટની જરૂર નથી, પાસવર્ડ સેવ થતો નથી અને કોઈ ટ્રેકિંગ કૂકીઝ નથી. તમારી બધી જ સર્ચ પ્રક્રિયા સંપૂર્ણપણે ગુપ્ત રહે છે.</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>⚡ હાઇ-સ્પીડ CDN પ્રોક્સી</h4>
+        <p>અમારું વિતરિત નેટવર્ક ફાઇલોને નેટિવ હેડર્સ સાથે ઝડપથી સ્ટ્રીમ કરે છે, જેથી ટાઇમઆઉટ થયા વગર મહત્તમ ડાઉનલોડ સ્પીડ મળે છે.</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>📱 તમામ ડિવાઇસ સપોર્ટ</h4>
+        <p>iOS Safari (iPhone &amp; iPad), Android Chrome, Windows PC, Mac અને Linux પર એકદમ સ્મૂધ અને એપ જેવો અનુભવ આપે છે.</p>
+    </div>
+</div>
+<h2>નૈતિક અને વાજબી સેવા</h2>
+<p>અમે કન્ટેન્ટ ક્રિએટર્સ અને બૌદ્ધિક સંપદાનું સંપૂર્ણ સન્માન કરીએ છીએ. InstaGo શૈક્ષણિક અને વ્યક્તિગત સંદર્ભ માટે ફેર-યુઝના નિયમો હેઠળ કામ કરે છે અને કોપીરાઇટ માલિકો માટે ઝડપી DMCA રીમૂવલ સુવિધા પૂરી પાડે છે.</p>
+<h2>ટેકનિકલ સ્થિરતા અને અપટાઇમ</h2>
+<p>જ્યારે પણ તૃતીય-પક્ષ સોશિયલ પ્રોટોકોલ્સ બદલાય ત્યારે પણ અમારી સર્વિસ ૯૯.૯% ચાલુ રહે તે માટે અમે મલ્ટી-નોડ ફેલઓવર આર્કિટેક્ચર સક્રિય રાખીએ છીએ.</p>`
+            },
+            privacy: {
+                breadHome: 'હોમ',
+                breadCurrent: 'પ્રાઇવેસી પોલિસી',
+                badgeText: 'પારદર્શિતા અને નિયમોનું પાલન',
+                titleText: 'પ્રાઇવેસી પોલિસી અને કૂકી ડિસ્ક્લોઝર',
+                subtitleText: `છેલ્લું અપડેટ: ${new Date().toLocaleDateString('gu-IN', {month: 'long', year: 'numeric'})} | Google AdSense, GDPR અને CCPA ના કડક નિયમો સાથે સુસંગત`,
+                tocTitle: 'આ પેજ પર',
+                tocOverview: 'વિહંગાવલોકન અને ક્ષેત્ર',
+                tocAdsense: '૧. Google AdSense અને કૂકીઝ',
+                tocZeroLog: '૨. ઝીરો-લોગ આર્કિટેક્ચર',
+                tocLogFiles: '૩. સર્વર લોગ્સ અને CDN',
+                tocThirdParty: '૪. તૃતીય-પક્ષ ભાગીદારો',
+                tocCcpa: '૫. CCPA અધિકારો (California)',
+                tocGdpr: '૬. GDPR ડેટા સુરક્ષા (EU)',
+                tocChildren: '૭. બાળકોની સુરક્ષા',
+                tocConsent: '૮. સંમતિ અને સંપર્ક',
+                btnHomeText: 'ડાઉનલોડર પર પાછા જાઓ',
+                contactSupportText: 'પ્રશ્નો છે? <a href="contact.php" style="color:var(--accent-blue);">સપોર્ટ ટીમનો સંપર્ક કરો</a>',
+                articleBody: `<div id="overview">
+    <p><strong>InstaGo</strong> પર અમારા મુલાકાતીઓની પ્રાઇવેસી અમારા માટે સર્વોપરી છે. આ પ્રાઇવેસી પોલિસી દસ્તાવેજ દર્શાવે છે કે InstaGo દ્વારા કઈ માહિતી એકત્રિત થાય છે અને અમે તેનું કેવી રીતે રક્ષણ કરીએ છીએ.</p>
+    <div class="legal-box-highlight success">
+        <p><strong>ઝીરો-ક્રેડેન્શિયલ ગેરંટી:</strong> અમને કોઈપણ યુઝર એકાઉન્ટ, પાસવર્ડ, ઇન્સ્ટાગ્રામ લોગિન કે ફોન નંબરની જરૂર નથી. અમે અમારા સર્વર પર કોઈપણ પર્સનલ બ્રાઉઝિંગ ઇતિહાસ કે મીડિયા સ્ટોર કરતા નથી.</p>
+    </div>
+</div>
+<h2 id="adsense">૧. Google AdSense અને DoubleClick DART કૂકીઝ</h2>
+<p>ગૂગલ અમારી વેબસાઇટ પર તૃતીય-પક્ષ વેન્ડર છે. તે મુલાકાતીઓને તેમની મુલાકાતના આધારે યોગ્ય અને સંબંધિત જાહેરાતો બતાવવા માટે <strong>DART કૂકીઝ</strong> નો ઉપયોગ કરે છે.</p>
+<p>મુલાકાતીઓ આ લિંક પર જઈને DART કૂકીઝના ઉપયોગને નાપસંદ કરી શકે છે: <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">https://policies.google.com/technologies/ads</a>.</p>
+<p>ગૂગલ ડેટાનો ઉપયોગ કેવી રીતે કરે છે તેની વિગતવાર માહિતી માટે જુઓ: <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">Google Privacy &amp; Terms for Partner Sites</a>.</p>
+<h2 id="zero-log">૨. અમે કઈ માહિતી એકત્રિત કરતા નથી (ઝીરો-લોગ ગેરંટી)</h2>
+<p>અન્ય પ્લેટફોર્મ્સથી વિપરીત, InstaGo ફક્ત એક ઓન-ધ-ફ્લાય ગેટવે તરીકે ડિઝાઇન કરવામાં આવ્યું છે:</p>
+<ul>
+    <li><strong>કોઈ યુઝર રજીસ્ટ્રેશન નહીં:</strong> તમારી પાસેથી ક્યારેય ઇમેઇલ, નામ કે ક્રેડિટ કાર્ડ વિગતો માંગવામાં આવતી નથી.</li>
+    <li><strong>કોઈ ઇન્સ્ટાગ્રામ લોગિન નહીં:</strong> અમે ક્યારેય તમારું ઇન્સ્ટાગ્રામ યુઝરનેમ કે પાસવર્ડ સેવ કરતા નથી.</li>
+    <li><strong>કોઈ ડાઉનલોડ હિસ્ટ્રી નહીં:</strong> સર્ચ કરેલી મીડિયા રિક્વેસ્ટ તાત્કાલિક પ્રોસેસ થાય છે અને તરત જ ડિલીટ થઈ જાય છે.</li>
+</ul>
+<h2 id="log-files">૩. સર્વર લોગ ફાઇલ્સ અને CDN ઇન્ફ્રાસ્ટ્રક્ચર</h2>
+<p>InstaGo સામાન્ય સર્વર લોગિંગ પ્રક્રિયાને અનુસરે છે જેમાં IP એડ્રેસ, બ્રાઉઝરનો પ્રકાર અને સમય નોંધાય છે. આ માહિતી કોઈપણ વ્યક્તિગત ઓળખ સાથે જોડાયેલી નથી અને તેનો ઉપયોગ માત્ર સાઇટની ઝડપ અને સ્થિરતા વધારવા માટે થાય છે.</p>
+<h2 id="third-party">૪. તૃતીય-પક્ષ જાહેરાત ભાગીદારો</h2>
+<p>અમારા જાહેરાત ભાગીદારો જાહેરાતોની અસરકારકતા માપવા માટે કૂકીઝનો ઉપયોગ કરી શકે છે. InstaGo નું આ કૂકીઝ પર કોઈ નિયંત્રણ હોતું નથી.</p>
+<h2 id="ccpa">૫. CCPA પ્રાઇવેસી અધિકારો (કેલિફોર્નિયા)</h2>
+<p>કેલિફોર્નિયા કન્ઝ્યુમર પ્રાઇવેસી એક્ટ (CCPA) હેઠળ વપરાશકર્તાઓને ડેટા સુરક્ષાના અધિકારો મળે છે. InstaGo કોઈપણ પર્સનલ ડેટા વેચતું કે સાચવતું નથી, તેથી અમે તમામ CCPA નિયમોનું સંપૂર્ણ પાલન કરીએ છીએ.</p>
+<h2 id="gdpr">૬. GDPR ડેટા સુરક્ષા અધિકારો (EU)</h2>
+<p>જનરલ ડેટા પ્રોટેક્શન રેગ્યુલેશન (GDPR) હેઠળ તમામ મુલાકાતીઓને માહિતી મેળવવા, સુધારવા અને ડિલીટ કરવાના સંપૂર્ણ અધિકારો ઉપલબ્ધ છે.</p>
+<h2 id="children">૭. બાળકોની સુરક્ષા અને COPPA</h2>
+<p>ઇન્ટરનેટનો ઉપયોગ કરતી વખતે બાળકોનું રક્ષણ કરવું એ અમારી પ્રાથમિકતા છે. InstaGo ૧૩ વર્ષથી ઓછી ઉંમરના બાળકો પાસેથી કોઈપણ ઓળખી શકાય તેવી વ્યક્તિગત માહિતી એકત્રિત કરતું નથી.</p>
+<h2 id="consent">૮. સંમતિ અને DPO સંપર્ક</h2>
+<p>અમારી વેબસાઇટનો ઉપયોગ કરીને, તમે આ પ્રાઇવેસી પોલિસી અને શરતો સાથે સંમત થાઓ છો. કોઈપણ પ્રશ્ન માટે કૃપા કરીને અમારા સંપર્ક પેજ દ્વારા અમારો સંપર્ક કરો.</p>`
+            },
+            terms: {
+                breadHome: 'હોમ',
+                breadCurrent: 'સેવાની શરતો',
+                badgeText: 'ઉપયોગની માર્ગદર્શિકા',
+                titleText: 'સેવાની શરતો અને ફેર-યુઝ',
+                subtitleText: `લાગુ તારીખ: ${new Date().toLocaleDateString('gu-IN', {month: 'long', year: 'numeric'})} | અમારા પ્લેટફોર્મનો ઉપયોગ કરતા પહેલાં કૃપા કરીને આ શરતો ધ્યાનથી વાંચો.`,
+                tocTitle: 'આ પેજ પર',
+                tocIntro: 'શરતોની સંમતિ',
+                tocFairUse: '૧. ફેર-યુઝ અને શૈક્ષણિક હેતુ',
+                tocIp: '૨. બૌદ્ધિક સંપદા અને નો-હોસ્ટિંગ',
+                tocConduct: '૩. વપરાશકર્તાની જવાબદારી',
+                tocWarranties: '૪. વૉરંટી અસ્વીકરણ',
+                tocLiability: '૫. જવાબદારીની મર્યાદા',
+                tocModifications: '૬. શરતોમાં સુધારા',
+                tocLaw: '૭. લાગુ કાયદો',
+                btnHomeText: 'ડાઉનલોડર પર પાછા જાઓ',
+                reviewPrivacyText: 'અમારી <a href="privacy.php" style="color:var(--accent-blue);">પ્રાઇવેસી પોલિસી</a> જુઓ',
+                articleBody: `<div id="intro">
+    <p><strong>InstaGo</strong> માં આપનું સ્વાગત છે. અમારી વેબસાઇટનો ઉપયોગ કરીને તમે આ સેવાની શરતોનું પાલન કરવા સંમત થાઓ છો. જો તમે કોઈપણ શરત સાથે સંમત ન હોવ, તો કૃપા કરીને સેવાનો ઉપયોગ કરશો નહીં.</p>
+</div>
+<h2 id="fair-use">૧. ફેર-યુઝ અને શૈક્ષણિક હેતુ</h2>
+<p>InstaGo એક શૈક્ષણિક વેબ ટૂલ તરીકે ડિઝાઇન કરવામાં આવ્યું છે જે વપરાશકર્તાઓને વ્યક્તિગત અને બિન-વ્યાવસાયિક ઑફલાઇન જોવા માટે સાર્વજનિક ઇન્સ્ટાગ્રામ સામગ્રી (જેમ કે રીલ્સ, સ્ટોરીઝ, હાઇલાઇટ્સ અને પ્રોફાઇલ ફોટા) ડાઉનલોડ કરવામાં મદદ કરે છે.</p>
+<div class="legal-box-highlight warning">
+    <p><strong>સૂચના:</strong> InstaGo સંપૂર્ણપણે સ્વતંત્ર છે અને ઇન્સ્ટાગ્રામ, Meta Platforms Inc. કે તેમની કોઈપણ પેટાકંપની સાથે જોડાયેલું નથી.</p>
+</div>
+<h2 id="ip-disclaimer">૨. બૌદ્ધિક સંપદા અધિકારો અને નો-હોસ્ટિંગ ડિસ્ક્લેમર</h2>
+<p><strong>InstaGo પોતાના સર્વર પર કોઈપણ કોપીરાઇટ કરેલ ઓડિયો, વિડિયો કે ફોટો મીડિયા હોસ્ટ, સ્ટોર કે આર્કાઇવ કરતું નથી.</strong></p>
+<p>બધા મીડિયા સ્ટ્રીમ્સ સીધા ઇન્સ્ટાગ્રામના સત્તાવાર Content Delivery Network (CDN) સર્વર પરથી જ લાવવામાં આવે છે. તમામ કોપીરાઇટ અને ટ્રેડમાર્ક્સ મૂળ ક્રિએટર્સના રહે છે.</p>
+<h2 id="user-conduct">૩. વપરાશકર્તાની જવાબદારી અને પ્રતિબંધિત વર્તન</h2>
+<p>ડાઉનલોડ કરેલ સામગ્રીનો ઉપયોગ અનધિકૃત વ્યાપારી હેતુઓ કે પુનઃવેચાણ માટે કરવાની સખત મનાઈ છે. વપરાશકર્તાઓએ હંમેશા ક્રિએટર્સના કોપીરાઇટનું સન્માન કરવું જરૂરી છે.</p>
+<h2 id="warranties">૪. વૉરંટી અસ્વીકરણ</h2>
+<p>આ સેવા કોઈપણ પ્રકારની સ્પષ્ટ કે ગર્ભિત વોરંટી વિના "જેવી છે તેવી" (AS IS) ઉપલબ્ધ કરાવવામાં આવે છે.</p>
+<h2 id="liability">૫. જવાબદારીની મર્યાદા</h2>
+<p>લાગુ કાયદા હેઠળ અનુમતિ મુજબ, InstaGo કે તેના ડેવલપર્સ આ ટૂલના ઉપયોગથી થતા કોઈપણ પ્રત્યક્ષ કે પરોક્ષ નુકસાન માટે જવાબદાર રહેશે નહીં.</p>
+<h2 id="modifications">૬. શરતોમાં સુધારા</h2>
+<p>અમે કોઈપણ સમયે આ સેવાની શરતોમાં ફેરફાર કરવાનો અધિકાર અનામત રાખીએ છીએ. સુધારેલી શરતો આ પેજ પર મુકાયા પછી તરત જ લાગુ થશે.</p>
+<h2 id="governing-law">૭. લાગુ કાયદો</h2>
+<p>આ શરતો આંતરરાષ્ટ્રીય ડિજિટલ કોપીરાઇટ નિયમો અને સેફ હાર્બર સિદ્ધાંતો અનુસાર સંચાલિત થાય છે.</p>`
+            }
+        },
+        hi: {
+            contact: {
+                breadHome: 'होम',
+                breadCurrent: 'संपर्क और DMCA',
+                badgeText: 'सपोर्ट और कॉपीराइट डेस्क',
+                titleText: 'हमसे संपर्क करें और DMCA नोटिस',
+                subtitleText: 'तकनीकी प्रतिक्रिया, व्यावसायिक पूछताछ और DMCA कॉपीराइट सहायता के लिए हम उपलब्ध हैं।',
+                ch1TitleText: 'तकनीकी सहायता और फीडबैक',
+                ch1BadgeText: '२४/७ डेस्क',
+                ch1DescText: 'वीडियो डाउनलोड करने में समस्या, ब्राउज़र अनुकूलता या सुझावों के लिए:',
+                ch2TitleText: 'DMCA और कॉपीराइट अनुपालन',
+                ch2BadgeText: 'सुरक्षित हार्बर',
+                ch2DescText: 'सत्यापित कॉपीराइट धारकों, बौद्धिक संपदा और लिंक हटाने की पूछताछ के लिए:',
+                ch3TitleText: 'व्यापार और साझेदारी',
+                ch3BadgeText: 'एंटरप्राइज',
+                ch3DescText: 'प्रेस, विज्ञापन पूछताछ और तकनीकी सहयोग के लिए:',
+                dmcaReqText: '<strong>DMCA नोटिस आवश्यकताएं (17 U.S.C. § 512):</strong> नोटिस भेजते समय कृपया प्रदान करें: (१) कॉपीराइट कार्य का विवरण, (२) ब्लॉक करने के लिए सटीक इंस्टाग्राम URL, (३) स्वामित्व का प्रमाण और (૪) अपनी संपर्क जानकारी।',
+                formTitleText: 'हमें सीधा संदेश भेजें',
+                formDescText: 'नीचे दिया गया फॉर्म भरें और हमारी टीम २४ से ४८ व्यावसायिक घंटों में उत्तर देगी।',
+                labelNameText: 'आपका नाम *',
+                labelEmailText: 'ईमेल पता *',
+                labelCategoryText: 'पूछताछ का प्रकार',
+                optGeneralText: 'सामान्य सहायता और तकनीकी प्रतिक्रिया',
+                optDmcaText: 'DMCA कॉपीराइट टेकडाउन नोटिस',
+                optBugText: 'बग रिपोर्ट / वीडियो लाने में समस्या',
+                optPartnerText: 'व्यावसायिक साझेदारी और प्रेस',
+                labelSubjectText: 'विषय (Subject)',
+                labelMessageText: 'संदेश *',
+                btnSendMsgText: 'संदेश भेजें',
+                trustLine: '🔒 आपका डेटा हमारी <a href="privacy.php" style="color:var(--accent-blue);">प्राइवेसी पॉलिसी</a> के तहत सुरक्षित है',
+                respTime: 'प्रतिक्रिया: &le; २४ घंटे',
+                btnHomeText: 'डाउनलोडर पर वापस जाएं',
+                footerTermsLine: 'हमारी <a href="terms.php" style="color:var(--accent-blue);">सेवा की शर्तें</a> और <a href="privacy.php" style="color:var(--accent-blue);">प्राइवेसी पॉलिसी</a> पढ़ें'
+            },
+            about: {
+                breadHome: 'होम',
+                breadCurrent: 'हमारे बारे में',
+                badgeText: 'मिशन और इंजीनियरिंग',
+                titleText: 'InstaGo के बारे में',
+                subtitleText: 'दुनिया का सबसे स्वच्छ, सबसे तेज़ और पूर्ण गोपनीय इंस्टाग्राम मीडिया डाउनलोडर।',
+                btnHomeText: 'मीडिया डाउनलोड करना शुरू करें',
+                assistText: 'सहायता चाहिए? <a href="contact.php" style="color:var(--accent-blue);">सपोर्ट टीम से संपर्क करें</a>',
+                articleBody: `<h2>हमारा मिशन</h2>
+<p><strong>InstaGo</strong> की स्थापना एक स्पष्ट लक्ष्य के साथ की गई थी: बिना किसी कष्टप्रद विज्ञापनों, भ्रामक रीडायरेक्ट्स या प्राइवेसी समझौते के क्रिएटर्स, शिक्षकों और सोशल मीडिया प्रेमियों को सार्वजनिक इंस्टाग्राम मीडिया सेव करने के लिए एक तेज़, सुरक्षित और सहज वेब प्लेटफ़ॉर्म प्रदान करना।</p>
+<div class="legal-box-highlight success">
+    <p><strong>हमारा दर्शन:</strong> स्वच्छ डिज़ाइन, बिना लॉगिन झंझट, शून्य वॉटरमार्क और अधिकतम मूल वीडियो स्पष्टता (1080p Full HD MP4)।</p>
+</div>
+<h2>क्या InstaGo को अद्वितीय बनाता है?</h2>
+<div class="legal-contact-grid">
+    <div class="legal-contact-card">
+        <h4>🎬 1080p शुद्ध स्पष्टता</h4>
+        <p>हम कभी भी वीडियो रिज़ॉल्यूशन या ऑडियो बिटरेट को संपीड़ित (compress) नहीं करते हैं। वीडियो बिल्कुल वैसे ही मिलता है जैसे मूल क्रिएटर ने अपलोड किया था।</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>🔒 प्राइवेसी बाय डिज़ाइन</h4>
+        <p>किसी अकाउंट की आवश्यकता नहीं, कोई पासवर्ड स्टोर नहीं होता और शून्य ट्रैकिंग कुकीज़। आपकी सभी खोजें पूरी तरह से गोपनीय रहती हैं।</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>⚡ हाई-स्पीड CDN प्रॉक्सी</h4>
+        <p>हमारा वितरित नेटवर्क फाइलों को सीधे स्ट्रीम करता है, जिससे डाउनलोड टाइमआउट नहीं होता और अधिकतम डाउनलोड गति मिलती है।</p>
+    </div>
+    <div class="legal-contact-card">
+        <h4>📱 सभी डिवाइस समर्थित</h4>
+        <p>iOS Safari (iPhone &amp; iPad), Android Chrome, Windows PC, Mac और Linux पर नेटिव ऐप जैसा सहज अनुभव प्रदान करता है।</p>
+    </div>
+</div>
+<h2>उचित और नैतिक सेवा</h2>
+<p>हम कंटेंट क्रिएटर्स और बौद्धिक संपदा का पूरा सम्मान करते हैं। InstaGo निष्पक्ष उपयोग (Fair Use) के तहत व्यक्तिगत संदर्भ के लिए संचालित होता है और कॉपीराइट धारकों के लिए त्वरित DMCA हटाने की सुविधा प्रदान करता है।</p>
+<h2>तकनीकी विश्वसनीयता और अपटाइम</h2>
+<p>थर्ड-पार्टी सोशल प्रोटोकॉल अपडेट होने पर भी ९૯.૯% निरंतर सेवा सुनिश्चित करने के लिए हम मल्टी-नोड बैकअप सिस्टम बनाए रखते हैं।</p>`
+            },
+            privacy: {
+                breadHome: 'होम',
+                breadCurrent: 'प्राइवेसी पॉलिसी',
+                badgeText: 'पारदर्शिता और अनुपालन',
+                titleText: 'प्राइवेसी पॉलिसी और कुकी प्रकटीकरण',
+                subtitleText: `अंतिम अपडेट: ${new Date().toLocaleDateString('hi-IN', {month: 'long', year: 'numeric'})} | Google AdSense, GDPR और CCPA के सख्त नियमों के अनुरूप`,
+                tocTitle: 'इस पेज पर',
+                tocOverview: 'अवलोकन और दायरा',
+                tocAdsense: '१. Google AdSense और कुकीज़',
+                tocZeroLog: '२. ज़ीरो-लॉग आर्किटेक्चर',
+                tocLogFiles: '३. सर्वर लॉग्स और CDN',
+                tocThirdParty: '४. थर्ड-पार्टी पार्टनर्स',
+                tocCcpa: '५. CCPA अधिकार (कैलिफ़ोर्निया)',
+                tocGdpr: '६. GDPR डेटा सुरक्षा (EU)',
+                tocChildren: '७. बच्चों की सुरक्षा',
+                tocConsent: '૮. सहमति और संपर्क',
+                btnHomeText: 'डाउनलोडर पर वापस जाएं',
+                contactSupportText: 'कोई प्रश्न है? <a href="contact.php" style="color:var(--accent-blue);">सपोर्ट टीम से संपर्क करें</a>',
+                articleBody: `<div id="overview">
+    <p><strong>InstaGo</strong> पर हमारे आगंतुकों की गोपनीयता हमारे लिए अत्यंत महत्वपूर्ण है। यह प्राइवेसी पॉलिसी दस्तावेज़ बताता है कि InstaGo द्वारा किस प्रकार की जानकारी एकत्र की जाती है और हम इसे कैसे सुरक्षित रखते हैं।</p>
+    <div class="legal-box-highlight success">
+        <p><strong>शून्य-क्रेडेंशियल गारंटी:</strong> हमें किसी यूज़र अकाउंट, पासवर्ड, इंस्टाग्राम लॉगिन या फ़ोन नंबर की आवश्यकता नहीं है। हम अपने सर्वर पर कोई व्यक्तिगत ब्राउज़िंग इतिहास या मीडिया फ़ाइलें संग्रहीत नहीं करते हैं।</p>
+    </div>
+</div>
+<h2 id="adsense">१. Google AdSense और DoubleClick DART कुकीज़</h2>
+<p>Google हमारी वेबसाइट पर एक थर्ड-पार्टी वेंडर है। यह हमारी साइट और इंटरनेट पर अन्य साइटों पर आने वाले उपयोगकर्ताओं को प्रासंगिक विज्ञापन दिखाने के लिए <strong>DART कुकीज़</strong> का उपयोग करता है।</p>
+<p>उपयोगकर्ता इस लिंक पर जाकर DART कुकीज़ के उपयोग से बाहर निकल सकते हैं: <a href="https://policies.google.com/technologies/ads" target="_blank" rel="noopener">https://policies.google.com/technologies/ads</a>.</p>
+<p>Google द्वारा डेटा उपयोग के बारे में अधिक जानकारी के लिए देखें: <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">Google Privacy &amp; Terms for Partner Sites</a>.</p>
+<h2 id="zero-log">२. जानकारी जो हम एकत्र नहीं करते (ज़ीरो-लॉग गारंटी)</h2>
+<p>अन्य प्लेटफॉर्मों के विपरीत, InstaGo को केवल ऑन-द-फ़्लाई गेटवे के रूप में बनाया गया है:</p>
+<ul>
+    <li><strong>कोई यूज़र पंजीकरण नहीं:</strong> आपसे कभी भी ईमेल, नाम या क्रेडिट कार्ड विवरण नहीं मांगा जाता है।</li>
+    <li><strong>कोई इंस्टाग्राम लॉगिन नहीं:</strong> हम कभी भी आपका इंस्टाग्राम पासवर्ड या टोकन संग्रहीत नहीं करते हैं।</li>
+    <li><strong>कोई डाउनलोड इतिहास नहीं:</strong> मीडिया अनुरोध तुरंत प्रोसेस होते हैं और डिलीवरी के बाद नष्ट हो जाते हैं।</li>
+</ul>
+<h2 id="log-files">३. सर्वर लॉग फाइल्स और CDN इन्फ्रास्ट्रक्चर</h2>
+<p>InstaGo मानक सर्वर लॉगिंग प्रक्रियाओं का पालन करता है। यह डेटा केवल सिस्टम प्रशासन, सुरक्षा और गति अनुकूलन के लिए उपयोग किया जाता है।</p>
+<h2 id="third-party">४. थर्ड-पार्टी विज्ञापन भागीदार</h2>
+<p>हमारे विज्ञापन भागीदार विज्ञापनों की प्रभावशीलता मापने के लिए कुकीज़ का उपयोग कर सकते हैं। InstaGo का इन कुकीज़ पर कोई नियंत्रण नहीं है।</p>
+<h2 id="ccpa">५. CCPA प्राइवेसी अधिकार (कैलिफ़ोर्निया)</h2>
+<p>कैलिफ़ोर्निया उपभोक्ता गोपनीयता अधिनियम (CCPA) के तहत उपयोगकर्ताओं को अपने डेटा की सुरक्षा के अधिकार हैं। InstaGo किसी भी व्यक्तिगत डेटा को नहीं बेचता है।</p>
+<h2 id="gdpr">६. GDPR डेटा सुरक्षा अधिकार (EU)</h2>
+<p>सामान्य डेटा संरक्षण विनियमन (GDPR) के तहत प्रत्येक उपयोगकर्ता को अपने डेटा तक पहुँचने, सुधारने और हटाने का अधिकार है।</p>
+<h2 id="children">७. बच्चों की जानकारी और COPPA</h2>
+<p>इंटरनेट का उपयोग करते समय बच्चों की सुरक्षा हमारी प्राथमिकता है। InstaGo जानबूझकर १३ वर्ष से कम उम्र के बच्चों से कोई व्यक्तिगत जानकारी एकत्र नहीं करता है।</p>
+<h2 id="consent">૮. सहमति और DPO संपर्क</h2>
+<p>हमारी वेबसाइट का उपयोग करके, आप इस प्राइवेसी पॉलिसी और इसकी शर्तों से सहमत होते हैं। किसी भी प्रश्न के लिए हमारे संपर्क पेज से संपर्क करें।</p>`
+            },
+            terms: {
+                breadHome: 'होम',
+                breadCurrent: 'सेवा की शर्तें',
+                badgeText: 'उपयोग दिशानिर्देश',
+                titleText: 'सेवा की शर्तें और फेयर-यूज़',
+                subtitleText: `प्रभावी तिथि: ${new Date().toLocaleDateString('hi-IN', {month: 'long', year: 'numeric'})} | कृपया हमारे प्लेटफ़ॉर्म का उपयोग करने से पहले इन शर्तों को ध्यान से पढ़ें।`,
+                tocTitle: 'इस पेज पर',
+                tocIntro: 'शर्तों की सहमति',
+                tocFairUse: '१. फेयर-यूज़ और शैक्षिक उद्देश्य',
+                tocIp: '२. बौद्धिक संपदा और नो-होस्टिंग',
+                tocConduct: '३. उपयोगकर्ता की ज़िम्मेदारी',
+                tocWarranties: '४. वारंटी का अस्वीकरण',
+                tocLiability: '५. देयता की सीमा',
+                tocModifications: '६. शर्तों में संशोधन',
+                tocLaw: '७. शासी कानून',
+                btnHomeText: 'डाउनलोडर पर वापस जाएं',
+                reviewPrivacyText: 'हमारी <a href="privacy.php" style="color:var(--accent-blue);">प्राइवेसी पॉलिसी</a> देखें',
+                articleBody: `<div id="intro">
+    <p><strong>InstaGo</strong> में आपका स्वागत है। हमारी वेबसाइट का उपयोग करके आप इन सेवा शर्तों से बंधे होने के लिए सहमत होते हैं। यदि आप किसी भी शर्त से असहमत हैं, तो कृपया सेवा का उपयोग न करें।</p>
+</div>
+<h2 id="fair-use">१. फेयर-यूज़ और शैक्षिक उद्देश्य</h2>
+<p>InstaGo एक शैक्षिक वेब टूल है जो उपयोगकर्ताओं को व्यक्तिगत और गैर-व्यावसायिक उपयोग के लिए सार्वजनिक इंस्टाग्राम सामग्री (रील्स, स्टोरीज़, हाइलाइट्स और प्रोफ़ाइल चित्र) डाउनलोड करने में मदद करता है।</p>
+<div class="legal-box-highlight warning">
+    <p><strong>सूचना:</strong> InstaGo पूरी तरह से स्वतंत्र है और इंस्टाग्राम या Meta Platforms Inc. से संबद्ध नहीं है।</p>
+</div>
+<h2 id="ip-disclaimer">२. बौद्धिक संपदा और नो-होस्टिंग अस्वीकरण</h2>
+<p><strong>InstaGo अपने सर्वर पर किसी भी कॉपीराइट ऑडियो, वीडियो या छवि को होस्ट, स्टोर या आर्काइव नहीं करता है।</strong></p>
+<p>सभी मीडिया आधिकारिक इंस्टाग्राम CDN से सीधे स्ट्रीम किए जाते हैं। सभी कॉपीराइट मूल क्रिएटर्स के पास रहते हैं।</p>
+<h2 id="user-conduct">३. उपयोगकर्ता की ज़िम्मेदारी और प्रतिबंध</h2>
+<p>कॉपीराइट सामग्री का अनधिकृत व्यावसायिक उपयोग करने या दूसरों के अधिकारों का उल्लंघन करने के लिए InstaGo का उपयोग करना सख्त वर्जित है।</p>
+<h2 id="warranties">४. वारंटी का अस्वीकरण</h2>
+<p>सेवा "जैसी है" और "जैसी उपलब्ध है" (AS IS) आधार पर बिना किसी वारंटी के प्रदान की जाती है।</p>
+<h2 id="liability">५. देयता की सीमा</h2>
+<p>कानून द्वारा अनुमत सीमा तक, InstaGo या इसके डेवलपर्स इस टूल के उपयोग से होने वाले किसी भी नुकसान के लिए उत्तरदायी नहीं होंगे।</p>
+<h2 id="modifications">६. शर्तों में संशोधन</h2>
+<p>हम किसी भी समय इन नियमों और शर्तों को संशोधित करने का अधिकार सुरक्षित रखते हैं।</p>
+<h2 id="governing-law">७. शासी कानून</h2>
+<p>ये शर्तें अंतर्राष्ट्रीय डिजिटल कॉपीराइट नियमों और सेफ हार्बर सिद्धांतों द्वारा शासित होती हैं।</p>`
+            }
+        }
+    };
+
+    function applySubpageTranslations(lang) {
+        const s = (subpagesI18n && subpagesI18n[lang]) ? subpagesI18n[lang] : subpagesI18n['en'];
+        if (!s) return;
+
+        const el = (id, val, isHtml) => {
+            const dom = document.getElementById(id);
+            if (dom && val !== undefined) {
+                if (isHtml) dom.innerHTML = val;
+                else dom.textContent = val;
+            }
+        };
+
+        // 1. Contact Page
+        if (s.contact && document.getElementById('contactBadgeText')) {
+            el('contactBreadHome', s.contact.breadHome);
+            el('contactBreadCurrent', s.contact.breadCurrent);
+            el('contactBadgeText', s.contact.badgeText);
+            el('contactTitleText', s.contact.titleText);
+            el('contactSubtitleText', s.contact.subtitleText);
+            el('ch1TitleText', s.contact.ch1TitleText);
+            el('ch1BadgeText', s.contact.ch1BadgeText);
+            el('ch1DescText', s.contact.ch1DescText);
+            el('ch2TitleText', s.contact.ch2TitleText);
+            el('ch2BadgeText', s.contact.ch2BadgeText);
+            el('ch2DescText', s.contact.ch2DescText);
+            el('ch3TitleText', s.contact.ch3TitleText);
+            el('ch3BadgeText', s.contact.ch3BadgeText);
+            el('ch3DescText', s.contact.ch3DescText);
+            el('dmcaReqText', s.contact.dmcaReqText, true);
+            el('contactFormTitleText', s.contact.formTitleText);
+            el('contactFormDescText', s.contact.formDescText);
+            el('labelNameText', s.contact.labelNameText);
+            el('labelEmailText', s.contact.labelEmailText);
+            el('labelCategoryText', s.contact.labelCategoryText);
+            el('optGeneralText', s.contact.optGeneralText);
+            el('optDmcaText', s.contact.optDmcaText);
+            el('optBugText', s.contact.optBugText);
+            el('optPartnerText', s.contact.optPartnerText);
+            el('labelSubjectText', s.contact.labelSubjectText);
+            el('labelMessageText', s.contact.labelMessageText);
+            el('btnSendMsgText', s.contact.btnSendMsgText);
+            el('contactTrustLine', s.contact.trustLine, true);
+            el('contactRespTime', s.contact.respTime, true);
+            el('contactBtnHomeText', s.contact.btnHomeText);
+            el('contactFooterTermsLine', s.contact.footerTermsLine, true);
+        }
+
+        // 2. About Page
+        if (s.about && document.getElementById('aboutBadgeText')) {
+            el('aboutBreadHome', s.about.breadHome);
+            el('aboutBreadCurrent', s.about.breadCurrent);
+            el('aboutBadgeText', s.about.badgeText);
+            el('aboutTitleText', s.about.titleText);
+            el('aboutSubtitleText', s.about.subtitleText);
+            el('aboutArticleBody', s.about.articleBody, true);
+            el('aboutBtnHomeText', s.about.btnHomeText);
+            el('aboutAssistText', s.about.assistText, true);
+        }
+
+        // 3. Privacy Policy Page
+        if (s.privacy && document.getElementById('privBadgeText')) {
+            el('privBreadHome', s.privacy.breadHome);
+            el('privBreadCurrent', s.privacy.breadCurrent);
+            el('privBadgeText', s.privacy.badgeText);
+            el('privTitleText', s.privacy.titleText);
+            el('privSubtitleText', s.privacy.subtitleText);
+            el('privTocTitle', s.privacy.tocTitle);
+            el('privTocOverview', s.privacy.tocOverview);
+            el('privTocAdsense', s.privacy.tocAdsense);
+            el('privTocZeroLog', s.privacy.tocZeroLog);
+            el('privTocLogFiles', s.privacy.tocLogFiles);
+            el('privTocThirdParty', s.privacy.tocThirdParty);
+            el('privTocCcpa', s.privacy.tocCcpa);
+            el('privTocGdpr', s.privacy.tocGdpr);
+            el('privTocChildren', s.privacy.tocChildren);
+            el('privTocConsent', s.privacy.tocConsent);
+            el('privArticleBody', s.privacy.articleBody, true);
+            el('privBtnHomeText', s.privacy.btnHomeText);
+            el('privContactSupportText', s.privacy.contactSupportText, true);
+        }
+
+        // 4. Terms of Service Page
+        if (s.terms && document.getElementById('termsBadgeText')) {
+            el('termsBreadHome', s.terms.breadHome);
+            el('termsBreadCurrent', s.terms.breadCurrent);
+            el('termsBadgeText', s.terms.badgeText);
+            el('termsTitleText', s.terms.titleText);
+            el('termsSubtitleText', s.terms.subtitleText);
+            el('termsTocTitle', s.terms.tocTitle);
+            el('termsTocIntro', s.terms.tocIntro);
+            el('termsTocFairUse', s.terms.tocFairUse);
+            el('termsTocIp', s.terms.tocIp);
+            el('termsTocConduct', s.terms.tocConduct);
+            el('termsTocWarranties', s.terms.tocWarranties);
+            el('termsTocLiability', s.terms.tocLiability);
+            el('termsTocModifications', s.terms.tocModifications);
+            el('termsTocLaw', s.terms.tocLaw);
+            el('termsArticleBody', s.terms.articleBody, true);
+            el('termsBtnHomeText', s.terms.btnHomeText);
+            el('termsReviewPrivacyText', s.terms.reviewPrivacyText, true);
+        }
+    }
+
     function applyLanguage(lang) {
         if (!i18n[lang]) lang = 'en';
         currentAppLang = lang;
@@ -1726,12 +2411,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // 5. Input Actions & Placeholder
         const pasteText = document.getElementById('pasteBtnText');
         if (pasteText) pasteText.textContent = t.pasteBtn;
-        if (submitBtnText && !submitBtn.disabled) submitBtnText.textContent = t.searchBtn;
+        if (submitBtnText && (!submitBtn || !submitBtn.disabled)) submitBtnText.textContent = t.searchBtn;
         
         // Update placeholder for active tab
         const activeTabBtn = document.querySelector('.tab-btn.active');
         const activeType = activeTabBtn ? activeTabBtn.getAttribute('data-type') : 'all';
-        updatePlaceholder(activeType);
+        if (urlInput) {
+            updatePlaceholder(activeType);
+        }
 
         // 6. Micro Perks
         const p1 = document.getElementById('perk1');
@@ -1975,6 +2662,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (paneAbout && t.legal) paneAbout.innerHTML = t.legal.paneAbout;
         if (paneContact && t.legal) paneContact.innerHTML = t.legal.paneContact;
 
+        // 11c. Standalone Subpages Translation (contact.php, about.php, privacy.php, terms.php)
+        if (typeof applySubpageTranslations === 'function') {
+            applySubpageTranslations(lang);
+        }
+
         // 12. Persist in storage and set html lang
         document.documentElement.setAttribute('lang', lang);
         try {
@@ -2193,11 +2885,11 @@ document.addEventListener('DOMContentLoaded', () => {
     switchActiveTab(initialType, false);
 
     // ==========================================================================
-    // News Headline Auto-Scroller for Mobile Devices (<= 600px only)
+    // News Headline Auto-Scroller for Mobile Devices (<= 699px only)
     // Applied to: 1. #reelQuickSpecs, 2. .footer-trust-chips
     // ==========================================================================
     function initMobileAutoScrollers() {
-        const isMobile = () => window.innerWidth <= 600;
+        const isMobile = () => window.innerWidth <= 699;
 
         function setupTicker(container) {
             if (!container) return null;
@@ -2360,6 +3052,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.history && window.history.replaceState) {
             window.history.replaceState({}, document.title, window.location.pathname);
         }
+    }
+
+    // Smooth scroll for Legal Pages Table of Contents
+    const legalTocLinks = document.querySelectorAll('.legal-toc-link[href^="#"]');
+    if (legalTocLinks.length > 0) {
+        legalTocLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                const targetId = link.getAttribute('href');
+                if (targetId && targetId.length > 1) {
+                    const targetEl = document.querySelector(targetId);
+                    if (targetEl) {
+                        e.preventDefault();
+                        const headerOffset = 85;
+                        const elementPosition = targetEl.getBoundingClientRect().top;
+                        const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+                        window.scrollTo({
+                            top: offsetPosition,
+                            behavior: 'smooth'
+                        });
+                        legalTocLinks.forEach(l => l.classList.remove('active'));
+                        link.classList.add('active');
+                    }
+                }
+            });
+        });
     }
 
     initMobileKeyboardDockHandler();

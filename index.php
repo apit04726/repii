@@ -890,10 +890,10 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
                     <div class="footer-nav-col">
                         <h4 class="footer-col-title" id="footColLegal">Legal &amp; Policy</h4>
                         <ul class="footer-links">
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="privacy" id="footLegPrivacy">Privacy Policy</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="terms" id="footLegTerms">Terms of Service</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="about" id="footLegAbout">About Us</a></li>
-                            <li><a href="javascript:void(0)" class="legal-open-btn" data-policy="contact" id="footLegContact">Contact &amp; DMCA</a></li>
+                            <li><a href="privacy.php" id="footLegPrivacy">Privacy Policy</a></li>
+                            <li><a href="terms.php" id="footLegTerms">Terms of Service</a></li>
+                            <li><a href="about.php" id="footLegAbout">About Us</a></li>
+                            <li><a href="contact.php" id="footLegContact">Contact &amp; DMCA</a></li>
                         </ul>
                     </div>
                 </div>

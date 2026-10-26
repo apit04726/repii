@@ -120,3 +120,33 @@ define('PROXY_POOL', [
 
 // Timeouts
 define('CURL_TIMEOUT', 15);
+
+// Media Link Security & Anti-Leech HMAC Signature Salt
+define('MEDIA_TOKEN_SECRET', 'InstaGo_Sec_Salt_d9841f3e_' . md5(__DIR__ . '_Repii_Downloader_2026_Salt'));
+
+/**
+ * Generate cryptographically signed, expiring download gateway URL
+ * Protects against URL tampering, external leeching/hotlinking, and unauthorized scraping
+ */
+function generate_secure_proxy_url($target_url, $type = 'video', $name = '', $thumb = '', $preview = false) {
+    if (empty($target_url)) return '';
+    $exp = time() + (4 * 3600); // 4-hour validity
+    $sig = substr(hash_hmac('sha256', $target_url . '|' . $type . '|' . $exp, MEDIA_TOKEN_SECRET), 0, 16);
+    
+    $params = [
+        'type' => $type,
+        'url'  => base64_encode($target_url),
+        'exp'  => $exp,
+        'sig'  => $sig
+    ];
+    if ($preview) {
+        $params['preview'] = 1;
+    }
+    if (!empty($name)) {
+        $params['name'] = $name;
+    }
+    if (!empty($thumb)) {
+        $params['thumb'] = base64_encode($thumb);
+    }
+    return 'download.php?' . http_build_query($params);
+}

@@ -1,0 +1,4 @@
+
+# System memory & internal agent context (do not deploy to production)
+AGENTS.md
+.agents/
