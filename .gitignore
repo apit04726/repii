@@ -1,6 +1,7 @@
 
 # System memory & internal agent context (do not deploy to production)
 AGENTS.md
+PROJECT_FLOW.md
 .agents/
 
 # Local testing and reference folders
