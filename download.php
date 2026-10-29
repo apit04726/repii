@@ -190,7 +190,14 @@ if ($exp > 0 && !empty($sig)) {
 
     $secret = defined('MEDIA_TOKEN_SECRET') ? MEDIA_TOKEN_SECRET : 'InstaGo_Sec_Salt_d9841f3e';
     $calc_sig = substr(hash_hmac('sha256', $url . '|' . $type . '|' . $exp, $secret), 0, 16);
-    if (!hash_equals($calc_sig, $sig)) {
+    $sig_valid = hash_equals($calc_sig, $sig);
+    if (!$sig_valid) {
+        $raw_decoded = @base64_decode($raw_url, true);
+        if ($raw_decoded && hash_equals(substr(hash_hmac('sha256', $raw_decoded . '|' . $type . '|' . $exp, $secret), 0, 16), $sig)) {
+            $sig_valid = true;
+        }
+    }
+    if (!$sig_valid) {
         http_response_code(403);
         die("Error 403: Security signature verification failed. Link has been tampered with.");
     }

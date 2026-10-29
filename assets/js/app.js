@@ -580,21 +580,63 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        if (data.type === 'dp' && (data.preview_url || data.thumbnail)) {
-            authorAvatar.referrerPolicy = 'no-referrer';
-            authorAvatar.src = data.preview_url || data.thumbnail;
+        authorAvatar.referrerPolicy = 'no-referrer';
+        const firstMedia = (data.media && data.media[0]) ? data.media[0] : {};
+        
+        // Multi-tier avatar candidates chain (prioritizes signed preview, thumbnail, direct media, proxy)
+        const rawCandidates = (data.type === 'dp') ? [
+            data.preview_url,
+            data.thumbnail,
+            firstMedia.preview_url,
+            firstMedia.thumbnail,
+            data.proxy_url,
+            firstMedia.proxy_url,
+            firstMedia.url,
+            data.download_url,
+            firstMedia.download_url
+        ] : [
+            data.preview_url,
+            data.thumbnail,
+            firstMedia.preview_url,
+            firstMedia.thumbnail
+        ];
+
+        // Deduplicate while preserving priority order
+        const avatarCandidates = [];
+        const seenCandidateUrls = new Set();
+        rawCandidates.forEach(function(u) {
+            if (u && typeof u === 'string' && u.length > 5 && !seenCandidateUrls.has(u)) {
+                seenCandidateUrls.add(u);
+                avatarCandidates.push(u);
+            }
+        });
+
+        // Safe SVG fallback avatar with white silhouette, fully URI-encoded for mobile WebKit & desktop
+        const svgFallback = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 100 100">' +
+            '<defs><linearGradient id="avGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
+            '<stop offset="0%" stop-color="#833ab4"/><stop offset="50%" stop-color="#fd1d1d"/><stop offset="100%" stop-color="#fcb045"/>' +
+            '</linearGradient></defs>' +
+            '<rect width="100" height="100" rx="50" fill="url(#avGrad)"/>' +
+            '<circle cx="50" cy="40" r="18" fill="#ffffff" opacity="0.95"/>' +
+            '<path d="M20 84 C22 62, 78 62, 80 84" fill="#ffffff" opacity="0.95"/>' +
+            '</svg>'
+        );
+
+        if (avatarCandidates.length > 0) {
+            let curAvatarIndex = 0;
+            authorAvatar.src = avatarCandidates[0];
             authorAvatar.onerror = function() {
-                if (data.preview_url && this.src !== data.preview_url) {
-                    this.src = data.preview_url;
-                } else if (data.thumbnail && this.src !== data.thumbnail) {
-                    this.src = data.thumbnail;
+                curAvatarIndex++;
+                if (curAvatarIndex < avatarCandidates.length) {
+                    this.src = avatarCandidates[curAvatarIndex];
                 } else {
-                    this.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="%23ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
+                    this.src = svgFallback;
+                    this.onerror = null;
                 }
             };
         } else {
-            authorAvatar.referrerPolicy = 'no-referrer';
-            authorAvatar.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="%23ffffff"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
+            authorAvatar.src = svgFallback;
         }
 
         // Caption / Bio
