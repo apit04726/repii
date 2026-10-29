@@ -455,9 +455,10 @@ body.live-protected [contenteditable="true"] {
 .hero-desc {
   font-size: clamp(0.95rem, 1.8vw, 1.12rem);
   color: var(--text-secondary);
-  max-width: 620px;
+  max-width: 680px;
   margin: 0 auto 2.5rem;
   line-height: 1.6;
+  text-wrap: balance;
 }
 
 /* ==========================================================================

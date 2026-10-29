@@ -30,7 +30,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     <meta name="apple-mobile-web-app-title" content="InstaGo">
     <meta name="mobile-web-app-capable" content="yes">
     <title>Instagram Reels Video Download (1080p Full HD) - InstaGo</title>
-    <meta name="description" content="Download Instagram Reels video, HD Profile Pictures (DP), Stories, and Photos online in 1080p Full HD MP4 without watermark for free. 100% anonymous & no login required.">
+    <meta name="description" content="Save HD Reels, Full Resolution Profile Pictures (DP), Stories, and Carousel Photos directly to your Gallery or PC in 1080p Full HD without watermark.">
     <meta name="keywords" content="instagram reels download, reels downloader, download instagram reels, instagram reels video download, instagram reel saver, save reels without watermark, free instagram reels download, instagram video download 1080p, instagram dp download, instagram story download">
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
     <link rel="canonical" href="<?= htmlspecialchars(SITE_URL . '/') ?>">
@@ -47,7 +47,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     <meta property="og:type" content="website">
     <meta property="og:url" content="<?= htmlspecialchars(SITE_URL . '/') ?>">
     <meta property="og:title" content="Instagram Reels Video Download (1080p HD) - InstaGo">
-    <meta property="og:description" content="Download Instagram Reels, HD Profile Pictures (DP), Stories, and Photos online for free in 1080p Full HD without watermark. Works on iPhone, Android, and PC.">
+    <meta property="og:description" content="Save HD Reels, Full Resolution Profile Pictures (DP), Stories, and Carousel Photos directly to your Gallery or PC. 100% free & anonymous.">
     <meta property="og:site_name" content="InstaGo">
     <meta property="og:image" content="<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.jpg?v=2') ?>">
     <meta property="og:image:secure_url" content="<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.jpg?v=2') ?>">
@@ -59,7 +59,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Instagram Reels Video Download (1080p HD) - InstaGo">
-    <meta name="twitter:description" content="Download Instagram Reels in 1080p Full HD without watermark fast, free, and anonymously.">
+    <meta name="twitter:description" content="Save HD Reels, Full Resolution Profile Pictures (DP), Stories, and Carousel Photos directly to your Gallery or PC.">
     <meta name="twitter:image" content="<?= htmlspecialchars(SITE_URL . '/assets/img/og-banner.jpg?v=2') ?>">
     <meta name="twitter:image:alt" content="InstaGo - Instagram Reels & Video Downloader in 1080p Full HD">
 
@@ -73,7 +73,7 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
       "url": "<?= htmlspecialchars(SITE_URL . '/') ?>",
       "applicationCategory": "MultimediaApplication",
       "operatingSystem": "All (iOS, Android, Windows, macOS, Linux)",
-      "description": "Free online Instagram Reels Downloader to save Instagram Reels videos, Stories, DP, and Photos in 1080p Full HD without watermark.",
+      "description": "Save HD Reels, Full Resolution Profile Pictures (DP), Stories, and Carousel Photos directly to your Gallery or PC in 1080p Full HD without watermark.",
       "offers": {
         "@type": "Offer",
         "price": "0",
