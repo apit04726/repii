@@ -2,3 +2,7 @@
 # System memory & internal agent context (do not deploy to production)
 AGENTS.md
 .agents/
+
+# Local testing and reference folders
+indown.io/
+scratch/

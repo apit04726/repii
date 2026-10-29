@@ -35,6 +35,16 @@ function decode_media_url($raw) {
     
     $decoded = @base64_decode($normalized, true);
     if ($decoded) {
+        // Handle wrapped indown.io/fetch?url= or nested proxy query parameters
+        if (strpos($decoded, 'indown.io/fetch') !== false || (strpos($decoded, 'url=') !== false && strpos($decoded, 'download.php') === false)) {
+            if (preg_match('/[?&]url=([^&]+)/i', $decoded, $um)) {
+                $inner = html_entity_decode(urldecode($um[1]));
+                if (filter_var($inner, FILTER_VALIDATE_URL) && preg_match('/^https?:\/\//i', $inner)) {
+                    return decode_media_url($inner);
+                }
+            }
+        }
+
         if (preg_match('/^https?:\/\//i', $decoded)) {
             return $decoded;
         }
@@ -128,7 +138,9 @@ $allowed_domains = [
     'threads.net',
     'unsplash.com',
     'snapcdn.app',
-    'rapidcdn.app'
+    'rapidcdn.app',
+    'indown.io',
+    'd3.indown.io'
 ];
 
 $is_allowed = false;
@@ -224,6 +236,11 @@ $clean_name = !empty($custom_name)
     : 'InstaGo_' . ucfirst($type) . '_' . date('Ymd_His');
 $filename = $clean_name . '.' . $ext;
 
+// If downloading authentic Instagram DP, preserve original Instagram filename matching reference site
+if ($type === 'dp' && preg_match('/([0-9_]+_n\.jpe?g)/i', $url, $fn_m)) {
+    $filename = $fn_m[1];
+}
+
 // If thumbnail is empty and it's an image or DP, media URL itself is the thumbnail
 if (empty($thumb_url) && ($type === 'image' || $type === 'dp')) {
     $thumb_url = $url;
@@ -233,6 +250,14 @@ if (empty($thumb_url) && ($type === 'image' || $type === 'dp')) {
 $is_preview = isset($_GET['preview']) || isset($_GET['view']);
 if ($is_preview) {
     $preview_target = !empty($thumb_url) ? $thumb_url : $url;
+    
+    // Unwrap nested indown.io/fetch?url= or wrapped proxy params
+    if (!empty($preview_target) && preg_match('/[?&]url=([^&]+)/i', $preview_target, $um)) {
+        $dec = html_entity_decode(urldecode($um[1]));
+        if (filter_var($dec, FILTER_VALIDATE_URL) && preg_match('/^https?:\/\//i', $dec)) {
+            $preview_target = $dec;
+        }
+    }
     
     $fetch_image_bytes = function($target_url, $use_proxy = false) {
         if (empty($target_url)) return null;
@@ -277,7 +302,18 @@ if ($is_preview) {
 
     if (!empty($img_data)) {
         while (ob_get_level()) ob_end_clean();
-        header('Content-Type: ' . $mime);
+        
+        // Detect authentic image MIME type so preview thumbnails never get served as video/mp4
+        $preview_mime = 'image/jpeg';
+        if (strpos($img_data, "\x89PNG") === 0) {
+            $preview_mime = 'image/png';
+        } elseif (strpos($img_data, "GIF8") === 0) {
+            $preview_mime = 'image/gif';
+        } elseif (strpos($img_data, "RIFF") === 0 && strpos($img_data, "WEBP") === 8) {
+            $preview_mime = 'image/webp';
+        }
+        
+        header('Content-Type: ' . $preview_mime);
         header('Content-Disposition: inline');
         header('Access-Control-Allow-Origin: *');
         header('Cache-Control: public, max-age=86400');
@@ -1635,7 +1671,7 @@ $L = $php_i18n[$initial_lang];
             let preloadPromise = null;
 
             // Start preloading the video/image in the background immediately as Tab 2 loads
-            if (rawMediaUrl) {
+            if (rawMediaUrl && (mediaType !== 'dp' || (!rawMediaUrl.includes('100x100') && !rawMediaUrl.includes('s100x100')))) {
                 preloadPromise = fetch(rawMediaUrl, { mode: 'cors' })
                     .then(res => {
                         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1671,7 +1707,7 @@ $L = $php_i18n[$initial_lang];
                 downloadFired = true;
 
                 // 1. If already preloaded and ready, trigger instant blob download (0 third tabs)
-                if (preloadedBlobUrl) {
+                if (preloadedBlobUrl && (mediaType !== 'dp' || (!rawMediaUrl.includes('100x100') && !rawMediaUrl.includes('s100x100')))) {
                     if (triggerBlobDownload(preloadedBlobUrl)) return;
                 }
 

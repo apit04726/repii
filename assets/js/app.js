@@ -1039,7 +1039,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dlBtn.href = buildGatewayDownloadUrl(m, 'Item_' + (index + 1), m.type, m.thumbnail);
                 dlBtn.className = 'media-item-dl-btn';
                 dlBtn.setAttribute('target', '_blank');
-                dlBtn.setAttribute('rel', 'opener');
+                dlBtn.setAttribute('rel', 'noopener noreferrer');
                 const dlBtnFull = m.type === 'video' ? 'Download MP4' : 'Download JPG';
                 const dlBtnMid = 'Download';
                 const dlBtnShort = m.type === 'video' ? 'MP4' : 'JPG';
@@ -1048,6 +1048,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dlBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                 });
+                card.appendChild(dlBtn);
 
                 // Tap card to switch active preview
                 card.addEventListener('click', () => {

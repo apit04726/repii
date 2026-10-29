@@ -89,6 +89,14 @@ function get_cached_media($key) {
                     @unlink($cache_file);
                     return null;
                 }
+                // Invalidate downscaled/corrupt DP cache (100x100 low-res thumbnail)
+                if (($decoded['type'] ?? '') === 'dp') {
+                    $dl = $decoded['download_url'] ?? '';
+                    if (empty($dl) || strpos($dl, 's100x100') !== false || strpos($dl, '100x100') !== false) {
+                        @unlink($cache_file);
+                        return null;
+                    }
+                }
                 if (is_array($decoded) && (!empty($decoded['download_url']) || !empty($decoded['media']))) {
                     return $decoded;
                 }
@@ -107,6 +115,13 @@ function set_cached_media($key, $data) {
                 return;
             }
         }
+        // Guard: Never cache downscaled 100x100 low-res DP
+        if (($data['type'] ?? '') === 'dp') {
+            $dl = $data['download_url'] ?? '';
+            if (strpos($dl, 's100x100') !== false || strpos($dl, '100x100') !== false) {
+                return;
+            }
+        }
         $clean_key = preg_replace('/[?#].*$/', '', trim($key));
         $cache_file = sys_get_temp_dir() . '/instago_m_' . md5($clean_key) . '.json';
         @file_put_contents($cache_file, json_encode($data), LOCK_EX);
@@ -122,7 +137,10 @@ function secure_media_item_links(&$item, $default_type = 'video', $default_name 
     
     if ($target && function_exists('generate_secure_proxy_url')) {
         $item['proxy_url'] = generate_secure_proxy_url($target, $type, $name, $thumb);
-        if ($type === 'dp' || !empty($item['preview_url'])) {
+        if (!empty($thumb) && !str_contains($thumb, 'download.php')) {
+            $item['preview_url'] = generate_secure_proxy_url($thumb, 'image', $name . '_thumb', '', true);
+            $item['thumbnail'] = $item['preview_url'];
+        } elseif ($type === 'dp' || !empty($item['preview_url'])) {
             $item['preview_url'] = generate_secure_proxy_url($target, $type, $name, $thumb, true);
         }
     }
@@ -146,8 +164,11 @@ function json_success($data, $cache_key = null) {
         if (!empty($data['download_url']) && function_exists('generate_secure_proxy_url')) {
             $thumb = $data['thumbnail'] ?? '';
             $data['proxy_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb);
-            if ($main_type === 'dp' || !empty($data['preview_url'])) {
+            if ($main_type === 'dp') {
                 $data['preview_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb, true);
+            } elseif (!empty($thumb) && !str_contains($thumb, 'download.php')) {
+                $data['preview_url'] = generate_secure_proxy_url($thumb, 'image', 'InstaGo_' . $main_auth . '_thumb', '', true);
+                $data['thumbnail'] = $data['preview_url'];
             }
         }
     }
@@ -551,13 +572,244 @@ function resolve_instagram_username_from_context($url, $identifier = '', $fallba
 }
 
 
+// Direct InDown.io Live Scraper Gateway (100% Account-Free, 0 Cookies, Matches InDown 1000%)
+function fetch_via_indown_io_scraper($target_url, $identifier = '', $detected_author = '', $media_type = 'auto') {
+    $curl_bin = (stripos(PHP_OS, 'WIN') === 0) ? 'curl.exe' : 'curl';
+    $cookie_file = sys_get_temp_dir() . '/indown_io_' . md5(uniqid(mt_rand(), true)) . '.txt';
+    $res = null;
+
+    $is_dp_request = ($media_type === 'dp' || $media_type === 'profile' || (strpos($target_url, '/s/') === false && strpos($target_url, '/stories/') === false && strpos($target_url, '/reel') === false && strpos($target_url, '/p/') === false && preg_match('/instagram\.com\/[A-Za-z0-9._]{2,30}\/?$/i', $target_url)));
+    $entry_url = $is_dp_request ? 'https://indown.io/insta-dp-viewer/en3' : 'https://indown.io/en5';
+
+    $test = @shell_exec("$curl_bin --version");
+    if (!empty($test)) {
+        $cmd1 = "$curl_bin -s -c \"{$cookie_file}\" -L \"{$entry_url}\"";
+        $html1 = @shell_exec($cmd1);
+        if ($html1 && preg_match('/name="_token"\s+value="([^"]+)"/', $html1, $tm)) {
+            $token = $tm[1];
+            $post = http_build_query([
+                'referer' => $entry_url,
+                'locale' => 'en',
+                '_token' => $token,
+                'link' => $target_url,
+                'z' => 'z'
+            ]);
+            $cmd2 = "$curl_bin -s -b \"{$cookie_file}\" -c \"{$cookie_file}\" -L -e \"{$entry_url}\" -d \"{$post}\" \"https://indown.io/download\"";
+            $res = @shell_exec($cmd2);
+        }
+        @unlink($cookie_file);
+    }
+
+    if (empty($res) || strlen($res) < 5000) {
+        $cookie_jar = sys_get_temp_dir() . '/indown_curl_' . md5(uniqid(mt_rand(), true)) . '.txt';
+        $ch1 = curl_init($entry_url);
+        curl_setopt($ch1, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch1, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch1, CURLOPT_COOKIEJAR, $cookie_jar);
+        curl_setopt($ch1, CURLOPT_COOKIEFILE, $cookie_jar);
+        curl_setopt($ch1, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+        curl_setopt($ch1, CURLOPT_SSL_VERIFYPEER, false);
+        $page = curl_exec($ch1);
+        curl_close($ch1);
+
+        if ($page && preg_match('/name="_token"\s+value="([^"]+)"/', $page, $tm)) {
+            $token = $tm[1];
+            $post = http_build_query([
+                'referer' => $entry_url,
+                'locale' => 'en',
+                '_token' => $token,
+                'link' => $target_url,
+                'z' => 'z'
+            ]);
+            $ch2 = curl_init('https://indown.io/download');
+            curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch2, CURLOPT_POST, true);
+            curl_setopt($ch2, CURLOPT_POSTFIELDS, $post);
+            curl_setopt($ch2, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch2, CURLOPT_COOKIEJAR, $cookie_jar);
+            curl_setopt($ch2, CURLOPT_COOKIEFILE, $cookie_jar);
+            curl_setopt($ch2, CURLOPT_REFERER, $entry_url);
+            curl_setopt($ch2, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+            curl_setopt($ch2, CURLOPT_SSL_VERIFYPEER, false);
+            $res = curl_exec($ch2);
+            curl_close($ch2);
+        }
+        @unlink($cookie_jar);
+    }
+
+    if (empty($res) || strlen($res) < 5000) return null;
+
+    if (strpos($res, 'Highlights not found') !== false || (strpos($res, 'Error:') !== false && strpos($res, 'id="error"') !== false)) {
+        return null;
+    }
+
+    // Check for DP / Profile Picture response first
+    if ($is_dp_request || strpos($res, 'profile-box') !== false || strpos($res, 'profile-button') !== false) {
+        preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $res, $am);
+        $hd_dp_url = '';
+        foreach ($am[1] as $idx => $href) {
+            $href = html_entity_decode($href);
+            if (strpos($href, 'cdninstagram.com') !== false || strpos($href, 'fbcdn.net') !== false) {
+                $hd_dp_url = preg_replace('/[?&]dl=1/', '', $href);
+                break;
+            }
+        }
+        if (!empty($hd_dp_url)) {
+            $user_cand = $identifier ?: ($detected_author ?: 'Instagram Profile');
+            $clean_user = ltrim($user_cand, '@');
+            return [
+                'type' => 'dp',
+                'author' => '@' . $clean_user,
+                'username' => $clean_user,
+                'full_name' => $clean_user,
+                'biography' => "Full HD Profile Picture (1080p) • @{$clean_user}",
+                'followers' => 0,
+                'following' => 0,
+                'posts_count' => 0,
+                'is_verified' => false,
+                'is_private' => false,
+                'thumbnail' => $hd_dp_url,
+                'preview_url' => $hd_dp_url,
+                'download_url' => $hd_dp_url,
+                'media' => [
+                    [
+                        'type' => 'dp',
+                        'quality' => 'Full HD Profile Picture (1080p)',
+                        'title' => 'Profile Picture',
+                        'url' => $hd_dp_url,
+                        'thumbnail' => $hd_dp_url,
+                        'preview_url' => $hd_dp_url,
+                        'download_url' => $hd_dp_url
+                    ]
+                ]
+            ];
+        }
+    }
+
+    $is_highlight = (strpos($target_url, '/s/') !== false || strpos($target_url, 'highlight') !== false);
+    $is_story = (strpos($target_url, '/stories/') !== false);
+    $label_prefix = $is_highlight ? 'Highlight' : ($is_story ? 'Story' : 'Item');
+
+    preg_match_all('/<div class="col-12 col-lg-4[^"]*">([\s\S]*?)(?=<div class="col-12 col-lg-4|<\/div>\s*<\/div>\s*<\/div>\s*<div class="mt-1|$)/i', $res, $blocks);
+    $items = !empty($blocks[1]) ? $blocks[1] : [];
+    if (empty($items)) {
+        preg_match_all('/(?:<video|<img[^>]+class="img-fluid)[\s\S]*?(?=<video|<img[^>]+class="img-fluid|$)/i', $res, $blocks2);
+        $items = !empty($blocks2[0]) ? $blocks2[0] : [];
+    }
+
+    $media_list = [];
+    foreach ($items as $idx => $block) {
+        $video_url = '';
+        $image_url = '';
+        $poster_url = '';
+        $audio_url = '';
+
+        if (preg_match('/<source[^>]+src="([^"]+)"/i', $block, $mv)) {
+            $video_url = html_entity_decode($mv[1]);
+        } elseif (preg_match('/<video[^>]+src="([^"]+)"/i', $block, $mv2)) {
+            $video_url = html_entity_decode($mv2[1]);
+        }
+
+        if (preg_match('/poster="([^"]+)"/i', $block, $mp)) {
+            $poster_url = html_entity_decode($mp[1]);
+        }
+
+        if (preg_match('/<img[^>]+src="([^"]+)"/i', $block, $mi)) {
+            $image_url = html_entity_decode($mi[1]);
+        }
+
+        preg_match_all('/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i', $block, $ml);
+        $server1_link = '';
+        $server2_link = '';
+        foreach ($ml[1] as $li => $href) {
+            $lbl = trim(strip_tags($ml[2][$li]));
+            $href = html_entity_decode($href);
+            if (stripos($lbl, 'Server 1') !== false) {
+                $server1_link = $href;
+            } elseif (stripos($lbl, 'Server 2') !== false) {
+                $server2_link = $href;
+            }
+            if (stripos($lbl, 'Audio') !== false || stripos($href, '.mp3') !== false || stripos($href, '.m4a') !== false) {
+                $audio_url = $href;
+            }
+        }
+
+        $is_vid = !empty($video_url) || (!empty($server1_link) && stripos($server1_link, '.mp4') !== false);
+        $main_url = $server1_link ?: ($video_url ?: ($image_url ?: $poster_url));
+        $thumb_url = $poster_url ?: ($image_url ?: $main_url);
+
+        // Unwrap authentic Instagram CDN image URL from indown.io/fetch proxy wrapper
+        if (preg_match('/[?&]url=([^&]+)/i', $thumb_url, $um)) {
+            $dec_thumb = html_entity_decode(urldecode($um[1]));
+            if (filter_var($dec_thumb, FILTER_VALIDATE_URL) && preg_match('/^https?:\/\//i', $dec_thumb)) {
+                $thumb_url = $dec_thumb;
+            }
+        }
+        $thumb_url = str_replace(['&amp;', 'u0026', '\\u0026'], '&', $thumb_url);
+
+        if (strpos($main_url, 'indown.io/images') !== false || (strpos($thumb_url, 'indown.io/images') !== false && !strpos($thumb_url, 'cdninstagram.com') && !strpos($thumb_url, 'fbcdn.net'))) {
+            continue;
+        }
+
+        if (!empty($main_url)) {
+            $num = count($media_list) + 1;
+            $proxy_url = 'download.php?type=' . ($is_vid ? 'video' : 'image') . '&name=' . urlencode('InstaGo_' . $label_prefix . '_' . $num) . ($thumb_url ? '&thumb=' . urlencode(base64_encode($thumb_url)) : '') . '&url=' . base64_encode($main_url);
+            
+            $preview_thumb = !empty($thumb_url)
+                ? ('download.php?preview=1&type=image&name=' . urlencode('InstaGo_' . $label_prefix . '_' . $num . '_thumb') . '&url=' . base64_encode($thumb_url))
+                : ($is_vid ? '' : $proxy_url);
+
+            $item_entry = [
+                'type' => $is_vid ? 'video' : 'image',
+                'quality' => $is_vid ? "{$label_prefix} #{$num} (Full HD Video with Sound)" : "{$label_prefix} #{$num} (HD Photo)",
+                'title' => "{$label_prefix} #{$num}",
+                'thumbnail' => $preview_thumb ?: $thumb_url,
+                'preview_url' => $preview_thumb ?: $thumb_url,
+                'url' => $main_url,
+                'proxy_url' => $proxy_url
+            ];
+
+            $media_list[] = $item_entry;
+        }
+    }
+
+    if (!empty($media_list)) {
+        $caption_text = $is_highlight
+            ? (count($media_list) . ' Highlights found (Ready to Download)')
+            : ($is_story ? (count($media_list) . ' Active Stories found') : '✨ Media Ready to Download');
+
+        $clean_auth = $detected_author ?: 'Highlight Stories';
+        return [
+            'type' => $is_highlight ? 'highlight' : ($is_story ? 'story' : 'reel'),
+            'shortcode' => $identifier ?: 'highlight',
+            'author' => $clean_auth,
+            'caption' => $caption_text,
+            'thumbnail' => $media_list[0]['thumbnail'] ?? $media_list[0]['url'],
+            'download_url' => $media_list[0]['url'],
+            'media' => $media_list
+        ];
+    }
+
+    return null;
+}
+
 // Universal Reference Site Bridge (Direct Bypass to Public Scraper Gateways: InDown & VideoDropper)
 // 100% Account-Free, 0 Cookies, No Account Suspension Risk, 100% Free
 function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel') {
-    $clean_url = explode('?', $insta_url)[0];
-    if (empty($clean_url)) return null;
+    $target_request_url = (strpos($insta_url, '/s/') !== false || strpos($insta_url, 'story_media_id') !== false) 
+        ? $insta_url 
+        : explode('?', $insta_url)[0];
+    if (empty($target_request_url)) return null;
 
     $detected_author = resolve_instagram_username_from_context($insta_url, $identifier);
+
+    // Engine 00: Direct InDown.io Live Scraper Gateway (Matches Reference Site 1000% with Full Audio, Highlights & HD DP)
+    $indown_io_res = fetch_via_indown_io_scraper($target_request_url, $identifier, $detected_author, $type);
+    if ($indown_io_res && (!empty($indown_io_res['media']) || !empty($indown_io_res['download_url']))) {
+        return $indown_io_res;
+    }
+
+    $clean_url = explode('?', $insta_url)[0];
 
     $decode_jwt_token = function($href) {
         if (preg_match('/token=([^&]+)/', $href, $m)) {
@@ -1189,6 +1441,13 @@ function fetch_instagram_dp($username) {
     $username = trim(ltrim($username, '@'));
     $username = preg_replace('/[^a-zA-Z0-9._]/', '', $username);
     if (empty($username)) return null;
+
+    // Stage 0: Direct InDown Reference Scraper (100% 0-Account, Full HD 1080p DP)
+    $profile_url = "https://www.instagram.com/{$username}/";
+    $indown_dp = fetch_via_indown_io_scraper($profile_url, $username, '@' . $username, 'dp');
+    if ($indown_dp && !empty($indown_dp['download_url'])) {
+        return $indown_dp;
+    }
 
     // Stage 1: Direct Instagram GraphQL / Web Profile Info Endpoint via Session Pool (Highest Resolution HD DP)
     $sessions = get_instagram_session_pool();
@@ -2110,6 +2369,20 @@ if (preg_match('/(?:instagram\.com\/)?stories\/(?:highlights\/([0-9]+)|([A-Za-z0
         $story_id = $m[3] ?? null;
     }
     $is_hl_url = (!empty($m[1]) || strtolower($username) === 'highlights');
+    // Stage 0: Direct Reference Site Bridge (100% Account-Free, 0 Cookies, Matches InDown 1000%)
+    $bridge_res = fetch_via_reference_bridge($input_url, $username, $is_hl_url ? 'highlight' : 'story');
+    if ($bridge_res && !empty($bridge_res['media'])) {
+        if ($is_hl_url) {
+            $bridge_res['type'] = 'highlight';
+        }
+        if (strtolower($username) !== 'highlights') {
+            $bridge_res['author'] = '@' . ltrim($username, '@');
+        } elseif (empty($bridge_res['author']) || $bridge_res['author'] === '@s' || $bridge_res['author'] === 'Instagram User' || $bridge_res['author'] === '@highlights') {
+            $bridge_res['author'] = 'Highlight Stories';
+        }
+        json_success($bridge_res, $cache_key);
+    }
+
     $res = fetch_instagram_story($username, $story_id);
     if ($res) {
         if ($is_hl_url) {
@@ -2162,6 +2435,17 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $clean_input_for_matchi
             $highlight_id = $rm[1];
         }
     }
+
+    // Stage 0: Direct Reference Site Bridge (100% Account-Free, 0 Cookies, Matches InDown 1000%)
+    $bridge_res = fetch_via_reference_bridge($input_url, $highlight_id ?: 'highlight', 'highlight');
+    if ($bridge_res && !empty($bridge_res['media'])) {
+        $bridge_res['type'] = 'highlight';
+        if (empty($bridge_res['author']) || $bridge_res['author'] === '@s' || $bridge_res['author'] === 'Instagram User' || $bridge_res['author'] === '@highlights') {
+            $bridge_res['author'] = 'Highlight Stories';
+        }
+        json_success($bridge_res, $cache_key);
+    }
+
     if ($highlight_id) {
         $res = fetch_instagram_story('highlights', $highlight_id);
         if ($res) {

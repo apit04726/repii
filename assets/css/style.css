@@ -1743,6 +1743,77 @@ body.live-protected [contenteditable="true"] {
   display: none;
 }
 
+/* Media Item Action Group (Video + Audio) */
+.media-item-actions-box {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.media-item-audio-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #c084fc !important;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.52rem 0.85rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+
+.media-item-audio-btn:hover {
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(168, 85, 247, 0.35);
+}
+
+.media-item-audio-btn:active {
+  transform: scale(0.95);
+}
+
+.media-item-audio-btn .dl-lbl-full {
+  display: inline;
+}
+
+.media-item-audio-btn .dl-lbl-mid,
+.media-item-audio-btn .dl-lbl-short {
+  display: none;
+}
+
+.btn-download-audio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.85rem 1.4rem;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: #c084fc !important;
+  font-weight: 700;
+  font-size: 0.94rem;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all 0.25s ease;
+  margin-top: 0.6rem;
+}
+
+.btn-download-audio:hover {
+  background: linear-gradient(135deg, #a855f7, #6366f1);
+  color: #ffffff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.35);
+}
+
 /* ==========================================================================
    Desktop Layout: High-End Balanced Design for Tall / Portrait (9:16) Reels
    ========================================================================== */
@@ -1855,6 +1926,19 @@ body.live-protected [contenteditable="true"] {
     font-size: 0.82rem;
     gap: 0.35rem;
   }
+  .media-item-audio-btn .dl-lbl-full {
+    display: none;
+  }
+  .media-item-audio-btn .dl-lbl-mid {
+    display: inline;
+  }
+  .media-item-audio-btn .dl-lbl-short {
+    display: none;
+  }
+  .media-item-audio-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.82rem;
+  }
 }
 
 /* Mobile Screens (<= 480px) */
@@ -1913,6 +1997,20 @@ body.live-protected [contenteditable="true"] {
   .media-item-dl-btn svg {
     width: 13px;
     height: 13px;
+  }
+  .media-item-audio-btn .dl-lbl-full,
+  .media-item-audio-btn .dl-lbl-mid {
+    display: none;
+  }
+  .media-item-audio-btn .dl-lbl-short {
+    display: inline;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+  }
+  .media-item-audio-btn {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.78rem;
+    border-radius: 8px;
   }
   .media-gallery-scroll {
     max-height: 400px;
