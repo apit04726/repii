@@ -1005,7 +1005,7 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
     // Engine A: InDown.net AJAX Bridge (Public Reference Scraper - Reels, Posts, Stories, Highlights, DP)
     if ($type === 'profile' || $type === 'dp') {
         $vt = 'profile';
-    } elseif ($type === 'story' || strpos($insta_url, '/stories/') !== false) {
+    } elseif ($type === 'story' || $type === 'highlight' || strpos($insta_url, '/stories/') !== false || strpos($insta_url, '/s/') !== false) {
         $vt = 'story';
     } else {
         $vt = 'reel';
@@ -2438,6 +2438,10 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $clean_input_for_matchi
 
     // Stage 0: Direct Reference Site Bridge (100% Account-Free, 0 Cookies, Matches InDown 1000%)
     $bridge_res = fetch_via_reference_bridge($input_url, $highlight_id ?: 'highlight', 'highlight');
+    if ((!$bridge_res || empty($bridge_res['media'])) && $highlight_id) {
+        $canonical_hl_url = "https://www.instagram.com/stories/highlights/{$highlight_id}/";
+        $bridge_res = fetch_via_reference_bridge($canonical_hl_url, $highlight_id, 'highlight');
+    }
     if ($bridge_res && !empty($bridge_res['media'])) {
         $bridge_res['type'] = 'highlight';
         if (empty($bridge_res['author']) || $bridge_res['author'] === '@s' || $bridge_res['author'] === 'Instagram User' || $bridge_res['author'] === '@highlights') {
@@ -2465,7 +2469,7 @@ if (preg_match('/instagram\.com\/s\/([A-Za-z0-9_-]+)/i', $clean_input_for_matchi
         json_success($rapid, $cache_key);
     }
 
-    json_fail('Highlight not found or the account is private.');
+    json_fail('Highlight not found or the account is private. (Tip: Enter the @username or profile link to load all active public stories)');
 }
 
 // 2. Reels: instagram.com/reel/SHORTCODE or /reels/SHORTCODE
