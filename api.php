@@ -1013,7 +1013,6 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
     } else {
         $vt = 'reel';
     }
-
     // InDown Reference Engine requires canonical profile URL (https://www.instagram.com/{user}/) for stories & profile DP
     $indown_q = $clean_url;
     if ($vt === 'profile' || $vt === 'story') {
