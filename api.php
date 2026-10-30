@@ -572,19 +572,75 @@ function resolve_instagram_username_from_context($url, $identifier = '', $fallba
 }
 
 
+// Helper: Robust multi-method system command runner for cPanel, VPS and Windows
+if (!function_exists('indown_run_cli_command')) {
+    function indown_run_cli_command($cmd) {
+        if (function_exists('exec')) {
+            $lines = [];
+            $rc = 0;
+            @exec($cmd . ' 2>&1', $lines, $rc);
+            if (!empty($lines)) return implode("\n", $lines);
+        }
+        if (function_exists('shell_exec')) {
+            $out = @shell_exec($cmd . ' 2>&1');
+            if (!empty($out)) return $out;
+        }
+        if (function_exists('popen')) {
+            $handle = @popen($cmd . ' 2>&1', 'r');
+            if ($handle) {
+                $out = '';
+                while (!feof($handle)) {
+                    $out .= fread($handle, 8192);
+                }
+                pclose($handle);
+                if (!empty($out)) return $out;
+            }
+        }
+        if (function_exists('proc_open')) {
+            $descriptors = [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w']
+            ];
+            $process = @proc_open($cmd, $descriptors, $pipes);
+            if (is_resource($process)) {
+                fclose($pipes[0]);
+                $out = stream_get_contents($pipes[1]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($process);
+                if (!empty($out)) return $out;
+            }
+        }
+        return null;
+    }
+}
+
 // Direct InDown.io Live Scraper Gateway (100% Account-Free, 0 Cookies, Matches InDown 1000%)
 function fetch_via_indown_io_scraper($target_url, $identifier = '', $detected_author = '', $media_type = 'auto') {
-    $curl_bin = (stripos(PHP_OS, 'WIN') === 0) ? 'curl.exe' : 'curl';
+    $curl_bin = null;
+    if (stripos(PHP_OS, 'WIN') === 0) {
+        $curl_bin = 'curl.exe';
+    } else {
+        foreach (['/usr/bin/curl', '/bin/curl', '/usr/local/bin/curl', 'curl'] as $candidate) {
+            $chk = indown_run_cli_command("$candidate --version");
+            if (!empty($chk) && stripos($chk, 'curl') !== false) {
+                $curl_bin = $candidate;
+                break;
+            }
+        }
+    }
+    if (!$curl_bin && stripos(PHP_OS, 'WIN') === 0) $curl_bin = 'curl.exe';
+
     $cookie_file = sys_get_temp_dir() . '/indown_io_' . md5(uniqid(mt_rand(), true)) . '.txt';
     $res = null;
 
     $is_dp_request = ($media_type === 'dp' || $media_type === 'profile' || (strpos($target_url, '/s/') === false && strpos($target_url, '/stories/') === false && strpos($target_url, '/reel') === false && strpos($target_url, '/p/') === false && preg_match('/instagram\.com\/[A-Za-z0-9._]{2,30}\/?$/i', $target_url)));
     $entry_url = $is_dp_request ? 'https://indown.io/insta-dp-viewer/en3' : 'https://indown.io/en5';
 
-    $test = @shell_exec("$curl_bin --version");
-    if (!empty($test)) {
+    if (!empty($curl_bin)) {
         $cmd1 = "$curl_bin -s -c \"{$cookie_file}\" -L \"{$entry_url}\"";
-        $html1 = @shell_exec($cmd1);
+        $html1 = indown_run_cli_command($cmd1);
         if ($html1 && preg_match('/name="_token"\s+value="([^"]+)"/', $html1, $tm)) {
             $token = $tm[1];
             $post = http_build_query([
@@ -595,12 +651,9 @@ function fetch_via_indown_io_scraper($target_url, $identifier = '', $detected_au
                 'z' => 'z'
             ]);
             $cmd2 = "$curl_bin -s -b \"{$cookie_file}\" -c \"{$cookie_file}\" -L -e \"{$entry_url}\" -d \"{$post}\" \"https://indown.io/download\"";
-            $res = @shell_exec($cmd2);
+            $res = indown_run_cli_command($cmd2);
         }
         @unlink($cookie_file);
-    } else {
-        // If curl CLI is unavailable (e.g. Vercel serverless), immediately yield to Engine A (indown.net ajax bridge)
-        return null;
     }
 
     if (empty($res) || strlen($res) < 5000) {

@@ -361,6 +361,10 @@ if (isset($_GET['direct']) && $_GET['direct'] == '1') {
             curl_setopt($ch_dp, CURLOPT_FOLLOWLOCATION, true);
             curl_setopt($ch_dp, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch_dp, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch_dp, CURLOPT_HTTPHEADER, [
+                'Referer: https://www.instagram.com/',
+                'Origin: https://www.instagram.com'
+            ]);
             curl_setopt($ch_dp, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
             $raw_dp = curl_exec($ch_dp);
             $dp_code = curl_getinfo($ch_dp, CURLINFO_HTTP_CODE);
