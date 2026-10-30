@@ -652,6 +652,9 @@ function fetch_via_indown_io_scraper($target_url, $identifier = '', $detected_au
             $res = indown_run_cli_command($cmd2);
         }
         @unlink($cookie_file);
+    } else {
+        // If curl CLI is unavailable (e.g. Vercel serverless), immediately yield so next scrapers execute instantly
+        return null;
     }
 
     if (empty($res) || strlen($res) < 5000) {
@@ -1402,7 +1405,7 @@ function fetch_via_native_profile_scraper($username) {
     // Attempt 1: Direct fetch with Crawler User-Agent (Works on Residential / Local servers)
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
     curl_setopt($ch, CURLOPT_TIMEOUT, 6);
@@ -1518,6 +1521,12 @@ function fetch_instagram_dp($username) {
     $bridge_dp = fetch_via_reference_bridge($profile_url, $username, 'dp');
     if ($bridge_dp && !empty($bridge_dp['media'])) {
         return $bridge_dp;
+    }
+
+    // Stage 0c: Native Profile OpenGraph Scraper (Works for BOTH Public & Private Accounts without cookies/login)
+    $native_dp = fetch_via_native_profile_scraper($username);
+    if ($native_dp && !empty($native_dp['download_url'])) {
+        return $native_dp;
     }
 
     // Stage 1: Direct Instagram GraphQL / Web Profile Info Endpoint via Session Pool (Highest Resolution HD DP)
