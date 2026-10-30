@@ -1546,6 +1546,12 @@ function fetch_instagram_dp($username) {
         return $bridge_dp;
     }
 
+    // Stage 0c: Native Profile OpenGraph Scraper (Instant Public & Private DP Support without timeout)
+    $native_dp = fetch_via_native_profile_scraper($username);
+    if ($native_dp && !empty($native_dp['download_url'])) {
+        return $native_dp;
+    }
+
     // Stage 1: Direct Instagram GraphQL / Web Profile Info Endpoint via Session Pool (Highest Resolution HD DP)
     $sessions = get_instagram_session_pool();
     if (!empty($sessions)) {
