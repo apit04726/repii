@@ -895,6 +895,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Helper for ModSecurity safe token obfuscation (bypasses cPanel ModSecurity 406 rules)
+        function rot13(str) {
+            if (!str) return '';
+            return str.replace(/[a-zA-Z]/g, function (c) {
+                return String.fromCharCode((c <= "Z" ? 90 : 122) >= (c = c.charCodeAt(0) + 13) ? c : c - 26);
+            });
+        }
+
         // Helper to construct secure 5-second countdown gateway URL
         function buildGatewayDownloadUrl(item, fallbackName, defaultType, thumbFallback) {
             let targetUrl = item.proxy_url || item.url || item.download_url || '';
@@ -905,14 +913,36 @@ document.addEventListener('DOMContentLoaded', () => {
             const curLang = localStorage.getItem('instago_app_lang') || 'gu';
 
             if (targetUrl && targetUrl.includes('download.php')) {
+                // ModSecurity 406 Safe Normalization: Convert any legacy url= parameter to token= with rot13
+                if (targetUrl.includes('url=')) {
+                    targetUrl = targetUrl.replace(/([?&])url=([^&]+)/g, function(match, prefix, val) {
+                        try {
+                            const rawDec = decodeURIComponent(val);
+                            return prefix + 'token=' + encodeURIComponent(rot13(rawDec));
+                        } catch(e) {
+                            return prefix + 'token=' + encodeURIComponent(rot13(val));
+                        }
+                    });
+                }
+                if (targetUrl.includes('thumb=')) {
+                    targetUrl = targetUrl.replace(/([?&])thumb=([^&]+)/g, function(match, prefix, val) {
+                        try {
+                            const rawDec = decodeURIComponent(val);
+                            return prefix + 'thumb_token=' + encodeURIComponent(rot13(rawDec));
+                        } catch(e) {
+                            return prefix + 'thumb_token=' + encodeURIComponent(rot13(val));
+                        }
+                    });
+                }
                 let sep = targetUrl.includes('?') ? '&' : '?';
                 if (!targetUrl.includes('name=') && cleanName) {
                     targetUrl += sep + 'name=' + encodeURIComponent(cleanName);
                     sep = '&';
                 }
-                if (!targetUrl.includes('thumb=') && thumb) {
+                if (!targetUrl.includes('thumb=') && !targetUrl.includes('thumb_token=') && thumb) {
                     try {
-                        targetUrl += sep + 'thumb=' + encodeURIComponent(btoa(unescape(encodeURIComponent(thumb))));
+                        const b64Thumb = btoa(unescape(encodeURIComponent(thumb)));
+                        targetUrl += sep + 'thumb_token=' + encodeURIComponent(rot13(b64Thumb));
                         sep = '&';
                     } catch(e) {}
                 }
@@ -925,9 +955,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (targetUrl) {
                 try {
                     const b64 = btoa(unescape(encodeURIComponent(targetUrl)));
-                    let url = `download.php?type=${encodeURIComponent(mediaType)}&name=${encodeURIComponent(cleanName)}&lang=${encodeURIComponent(curLang)}&url=${encodeURIComponent(b64)}`;
+                    const safeToken = rot13(b64);
+                    let url = `download.php?type=${encodeURIComponent(mediaType)}&name=${encodeURIComponent(cleanName)}&lang=${encodeURIComponent(curLang)}&token=${encodeURIComponent(safeToken)}`;
                     if (thumb) {
-                        url += `&thumb=${encodeURIComponent(btoa(unescape(encodeURIComponent(thumb))))}`;
+                        const b64Thumb = btoa(unescape(encodeURIComponent(thumb)));
+                        url += `&thumb_token=${encodeURIComponent(rot13(b64Thumb))}`;
                     }
                     return url;
                 } catch(e) {

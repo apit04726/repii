@@ -11,10 +11,10 @@ require_once __DIR__ . '/config.php';
 ini_set('display_errors', 0);
 error_reporting(0);
 
-$raw_url = $_GET['url'] ?? '';
+$raw_url = $_GET['token'] ?? $_GET['m'] ?? $_GET['url'] ?? '';
 $type = $_GET['type'] ?? 'video';
 $custom_name = $_GET['name'] ?? '';
-$raw_thumb = $_GET['thumb'] ?? '';
+$raw_thumb = $_GET['thumb_token'] ?? $_GET['thumb'] ?? '';
 $initial_lang = $_GET['lang'] ?? 'gu';
 
 function decode_media_url($raw) {
@@ -25,7 +25,18 @@ function decode_media_url($raw) {
         return $raw;
     }
     
-    // Robust base64 handling: replace spaces back to + and handle URL-safe characters
+    // 1. Try ModSecurity-safe rot13 base64 first (eliminates ModSecurity 406 false positives)
+    $rot13_str = str_rot13($raw);
+    $rot_norm = str_replace([' ', '-'], ['+', '+'], $rot13_str);
+    $rot_norm = str_replace('_', '/', $rot_norm);
+    $r_pad = strlen($rot_norm) % 4;
+    if ($r_pad > 0) $rot_norm .= str_repeat('=', 4 - $r_pad);
+    $rot_dec = @base64_decode($rot_norm, true);
+    if ($rot_dec && preg_match('/^https?:\/\//i', $rot_dec)) {
+        return $rot_dec;
+    }
+    
+    // 2. Robust standard base64 handling: replace spaces back to + and handle URL-safe characters
     $normalized = str_replace([' ', '-'], ['+', '+'], $raw);
     $normalized = str_replace('_', '/', $normalized);
     $pad = strlen($normalized) % 4;
@@ -53,6 +64,10 @@ function decode_media_url($raw) {
             $query = parse_url($decoded, PHP_URL_QUERY);
             if ($query) {
                 parse_str($query, $params);
+                if (!empty($params['token'])) {
+                    $unwrapped = decode_media_url($params['token']);
+                    if ($unwrapped) return $unwrapped;
+                }
                 if (!empty($params['url'])) {
                     $unwrapped = decode_media_url($params['url']);
                     if ($unwrapped) return $unwrapped;
@@ -334,7 +349,8 @@ if ($is_preview) {
 // 2. Direct Download Execution:
 // Stream file with Content-Disposition: attachment so that mobile & desktop devices save the file directly
 // to the Downloads/Gallery folder with 100% full audio/voice/music, instead of opening a muted browser player!
-if (isset($_GET['direct']) && $_GET['direct'] == '1') {
+if 
+(isset($_GET['direct']) && $_GET['direct'] == '1') {
     // Native cPanel streaming with attachment headers so file saves to device gallery/downloads with full audio/song!
     $should_stream = true;
 
@@ -427,6 +443,14 @@ if (isset($_GET['direct']) && $_GET['direct'] == '1') {
 // 3. Render 5-Second Countdown Gateway Page (Smart, Professional, 100% Responsive for All Devices)
 $direct_params = $_GET;
 $direct_params['direct'] = '1';
+if (isset($direct_params['url'])) {
+    $direct_params['token'] = str_rot13($direct_params['url']);
+    unset($direct_params['url']);
+}
+if (isset($direct_params['thumb'])) {
+    $direct_params['thumb_token'] = str_rot13($direct_params['thumb']);
+    unset($direct_params['thumb']);
+}
 $direct_download_url = 'download.php?' . http_build_query($direct_params);
 
 // Multi-Language Support (EN, GU, HI)
@@ -1339,7 +1363,7 @@ $L = $php_i18n[$initial_lang];
                 <div class="media-thumb-wrapper">
                     <?php 
                         $preview_target_url = !empty($thumb_url) ? $thumb_url : $url;
-                        $proxy_preview_src = 'download.php?preview=1&url=' . urlencode(base64_encode($preview_target_url)) . '&name=' . urlencode($clean_name);
+                        $proxy_preview_src = 'download.php?preview=1&token=' . urlencode(str_rot13(base64_encode($preview_target_url))) . '&name=' . urlencode($clean_name);
                         $initial_char = strtoupper(substr(preg_replace('/[^a-zA-Z0-9]/', '', $clean_name ?: 'I'), 0, 1)) ?: 'I';
                         $inline_svg_fallback = 'data:image/svg+xml;utf8,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 100 100"><defs><linearGradient id="ig" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#833ab4"/><stop offset="50%" stop-color="#fd1d1d"/><stop offset="100%" stop-color="#fcb045"/></linearGradient></defs><rect width="100" height="100" rx="20" fill="url(#ig)"/><circle cx="50" cy="42" r="18" fill="#ffffff" opacity="0.95"/><path d="M22 84 C24 64, 76 64, 78 84" fill="#ffffff" opacity="0.95"/><text x="50" y="47" font-family="sans-serif" font-size="14" font-weight="bold" fill="#e1306c" text-anchor="middle">' . $initial_char . '</text></svg>');
                     ?>

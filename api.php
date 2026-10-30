@@ -128,16 +128,40 @@ function set_cached_media($key, $data) {
     }
 }
 
+function unwrap_raw_media_target($val) {
+    if (empty($val) || !is_string($val)) return '';
+    if (preg_match('/^https?:\/\//i', $val) && strpos($val, 'download.php') === false) {
+        return $val;
+    }
+    if (strpos($val, 'download.php') !== false) {
+        $q = parse_url($val, PHP_URL_QUERY);
+        if ($q) {
+            parse_str($q, $params);
+            if (!empty($params['token'])) {
+                $rot = str_rot13($params['token']);
+                $dec = @base64_decode($rot, true);
+                if ($dec && preg_match('/^https?:\/\//i', $dec)) return $dec;
+            }
+            if (!empty($params['url'])) {
+                $dec = @base64_decode($params['url'], true);
+                if ($dec && preg_match('/^https?:\/\//i', $dec)) return $dec;
+            }
+        }
+    }
+    return $val;
+}
+
 function secure_media_item_links(&$item, $default_type = 'video', $default_name = '') {
     if (!is_array($item)) return;
-    $target = $item['url'] ?? $item['download_url'] ?? '';
+    $target = unwrap_raw_media_target($item['url'] ?? $item['download_url'] ?? $item['proxy_url'] ?? '');
     $type = $item['type'] ?? $default_type;
     $name = $item['name'] ?? $default_name;
-    $thumb = $item['thumbnail'] ?? $item['thumb'] ?? '';
+    $thumb = unwrap_raw_media_target($item['thumbnail'] ?? $item['thumb'] ?? '');
     
     if ($target && function_exists('generate_secure_proxy_url')) {
+        $item['url'] = $target;
         $item['proxy_url'] = generate_secure_proxy_url($target, $type, $name, $thumb);
-        if (!empty($thumb) && !str_contains($thumb, 'download.php')) {
+        if (!empty($thumb)) {
             $item['preview_url'] = generate_secure_proxy_url($thumb, 'image', $name . '_thumb', '', true);
             $item['thumbnail'] = $item['preview_url'];
         } elseif ($type === 'dp' || !empty($item['preview_url'])) {
@@ -161,12 +185,14 @@ function json_success($data, $cache_key = null) {
             }
             unset($m);
         }
-        if (!empty($data['download_url']) && function_exists('generate_secure_proxy_url')) {
-            $thumb = $data['thumbnail'] ?? '';
-            $data['proxy_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb);
+        $raw_dl = unwrap_raw_media_target($data['download_url'] ?? $data['proxy_url'] ?? '');
+        if (!empty($raw_dl) && function_exists('generate_secure_proxy_url')) {
+            $data['download_url'] = $raw_dl;
+            $thumb = unwrap_raw_media_target($data['thumbnail'] ?? '');
+            $data['proxy_url'] = generate_secure_proxy_url($raw_dl, $main_type, 'InstaGo_' . $main_auth, $thumb);
             if ($main_type === 'dp') {
-                $data['preview_url'] = generate_secure_proxy_url($data['download_url'], $main_type, 'InstaGo_' . $main_auth, $thumb, true);
-            } elseif (!empty($thumb) && !str_contains($thumb, 'download.php')) {
+                $data['preview_url'] = generate_secure_proxy_url($raw_dl, $main_type, 'InstaGo_' . $main_auth, $thumb, true);
+            } elseif (!empty($thumb)) {
                 $data['preview_url'] = generate_secure_proxy_url($thumb, 'image', 'InstaGo_' . $main_auth . '_thumb', '', true);
                 $data['thumbnail'] = $data['preview_url'];
             }
