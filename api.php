@@ -598,6 +598,9 @@ function fetch_via_indown_io_scraper($target_url, $identifier = '', $detected_au
             $res = @shell_exec($cmd2);
         }
         @unlink($cookie_file);
+    } else {
+        // If curl CLI is unavailable (e.g. Vercel serverless), immediately yield to Engine A (indown.net ajax bridge)
+        return null;
     }
 
     if (empty($res) || strlen($res) < 5000) {
@@ -1011,8 +1014,20 @@ function fetch_via_reference_bridge($insta_url, $identifier = '', $type = 'reel'
         $vt = 'reel';
     }
 
+    // InDown Reference Engine requires canonical profile URL (https://www.instagram.com/{user}/) for stories & profile DP
+    $indown_q = $clean_url;
+    if ($vt === 'profile' || $vt === 'story') {
+        $candidate_user = !empty($detected_author) ? ltrim($detected_author, '@') : (!empty($identifier) ? ltrim($identifier, '@') : '');
+        if (empty($candidate_user) && preg_match('/(?:instagram\.com\/)?(?:stories\/)?([A-Za-z0-9._]{2,30})/i', $clean_url, $um)) {
+            $candidate_user = $um[1];
+        }
+        if (!empty($candidate_user) && !in_array(strtolower($candidate_user), ['stories', 'highlights', 'reel', 'reels', 'p', 'tv', 'share', 's'])) {
+            $indown_q = "https://www.instagram.com/{$candidate_user}/";
+        }
+    }
+
     $post_data = http_build_query([
-        'q' => $clean_url,
+        'q' => $indown_q,
         'vt' => $vt,
         't' => 'media',
         'lang' => 'en',
@@ -1447,6 +1462,12 @@ function fetch_instagram_dp($username) {
     $indown_dp = fetch_via_indown_io_scraper($profile_url, $username, '@' . $username, 'dp');
     if ($indown_dp && !empty($indown_dp['download_url'])) {
         return $indown_dp;
+    }
+
+    // Stage 0b: Direct InDown Reference Bridge (Engine A: 100% 0-Account, Full HD 1080p DP)
+    $bridge_dp = fetch_via_reference_bridge($profile_url, $username, 'dp');
+    if ($bridge_dp && !empty($bridge_dp['media'])) {
+        return $bridge_dp;
     }
 
     // Stage 1: Direct Instagram GraphQL / Web Profile Info Endpoint via Session Pool (Highest Resolution HD DP)
