@@ -76,9 +76,18 @@ Options -Indexes
     ExpiresByType font/woff "access plus 1 year"
     ExpiresByType font/woff2 "access plus 1 year"
 
-    # HTML
+    # HTML & Dynamic Content
     ExpiresByType text/html "access plus 0 seconds"
 </IfModule>
 
-# 6. Default UTF-8 Charset
+# 6. Prevent Cloudflare & Browser Caching of Dynamic PHP / HTML Files
+<FilesMatch "\.(php|html|htm)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache, no-store, must-revalidate, max-age=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </IfModule>
+</FilesMatch>
+
+# 7. Default UTF-8 Charset
 AddDefaultCharset UTF-8

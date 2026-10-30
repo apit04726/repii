@@ -335,23 +335,8 @@ if ($is_preview) {
 // Stream file with Content-Disposition: attachment so that mobile & desktop devices save the file directly
 // to the Downloads/Gallery folder with 100% full audio/voice/music, instead of opening a muted browser player!
 if (isset($_GET['direct']) && $_GET['direct'] == '1') {
-    $is_vercel = !empty($_ENV['VERCEL']) || !empty($_SERVER['VERCEL']);
-    
-    // Always stream directly with attachment headers so file saves to device gallery/downloads with full audio/song!
+    // Native cPanel streaming with attachment headers so file saves to device gallery/downloads with full audio/song!
     $should_stream = true;
-    if ($is_vercel && $type === 'video') {
-        $ch_h = curl_init($url);
-        curl_setopt($ch_h, CURLOPT_NOBODY, true);
-        curl_setopt($ch_h, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch_h, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch_h, CURLOPT_TIMEOUT, 3);
-        curl_exec($ch_h);
-        $cl = curl_getinfo($ch_h, CURLINFO_CONTENT_LENGTH_DOWNLOAD);
-        curl_close($ch_h);
-        if ($cl > 4700000) {
-            $should_stream = false;
-        }
-    }
 
     if ($should_stream) {
         // High-Definition Profile DP Enhancement (Guarantees true 1080x1080 Full HD output matching reference site)
